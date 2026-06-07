@@ -1,0 +1,13 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.9.0
+2 info using node@v24.14.0
+3 silly config load:file:C:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:D:\eco source\qiancheng0605\qiancheng0605v1\.npmrc
+5 silly config load:file:C:\Users\qianc\.npmrc
+6 warn Unknown user config "\Program Files\nodejs\node_cache" (cacheD:\Program Files\nodejs\node_cache). This will stop working in the next major version of npm.
+7 silly config load:file:D:\Program Files\nodejs\node_global\etc\npmrc
+8 verbose title npm run dev
+9 verbose argv "run" "dev"
+10 verbose logfile logs-max:10 dir:D:\eco source\qiancheng0605\qiancheng0605v1\.npm-cache\_logs\2026-06-07T06_57_13_058Z-
+11 verbose logfile D:\eco source\qiancheng0605\qiancheng0605v1\.npm-cache\_logs\2026-06-07T06_57_13_058Z-debug-0.log
+12 silly logfile done cleaning log files
