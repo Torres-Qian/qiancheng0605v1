@@ -132,4 +132,5 @@ export interface FileMetadata {
   sheetCount: number;
   totalRows: number;
   totalCols: number;
+  rowSheetMap?: string[];  // 多Sheet合并时，每行对应的Sheet名称
 }

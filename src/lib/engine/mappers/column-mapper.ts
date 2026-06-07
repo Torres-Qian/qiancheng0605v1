@@ -44,15 +44,22 @@ export function extractFromTail(rawText: string, matchPattern: string, fieldName
   if (hasRegexChars) {
     // 已经是正则，直接使用
     regex = new RegExp(matchPattern, 'i');
+    const match = rawText.match(regex);
+    return match ? (match[1] || match[0]).trim() : '';
   } else {
-    // 是简单关键词，自动补充冒号和捕获组
-    // 如果关键词以 \s 开头说明已经带了前置匹配，直接拼接
-    // 支持格式：关键词:值、关键词：值、关键词 值（冒号可选）
-    regex = new RegExp(matchPattern + '\\s*[:：]?\\s*(\\S+)', 'i');
+    // 按行匹配，限制：必须用空格/冒号与值分隔，不匹配紧贴关键词的情况
+    const lines = rawText.split(/\r?\n/);
+    const lineRegex = new RegExp(matchPattern + '([ \\t]+|(?:[ \\t]*[:：]))([ \\t]*)(\\S+)', 'i');
+    for (const line of lines) {
+      const match = line.match(lineRegex);
+      if (!match) continue;
+      const value = match[3].trim();
+      // 值以冒号结尾说明空值（如 收货门店： 联系人：）
+      if (/[：:]$/.test(value)) continue;
+      return value;
+    }
+    return '';
   }
-
-  const match = rawText.match(regex);
-  return match ? (match[1] || match[0]).trim() : '';
 }
 
 // 正则映射：用正则从整行/整段文本中提取

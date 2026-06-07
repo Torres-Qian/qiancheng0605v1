@@ -6,6 +6,7 @@ export function readExcelBuffer(buffer: ArrayBuffer, fileName: string): RawDataG
   const data = new Uint8Array(buffer);
   const workbook = XLSX.read(data, { type: 'array' });
   const sheetNames = workbook.SheetNames;
+  console.log(`[readExcel] 文件"${fileName}" 共${sheetNames.length}个Sheet: [${sheetNames.join(', ')}]`);
   const sheets: Record<string, RawDataGrid> = {};
 
   for (const sheetName of sheetNames) {
@@ -25,6 +26,7 @@ export function readExcelBuffer(buffer: ArrayBuffer, fileName: string): RawDataG
       return padded;
     });
 
+    console.log(`[readExcel] Sheet "${sheetName}": ${paddedRows.length}行, ${maxCols}列, 首行: [${paddedRows[0]?.slice(0,5).join(', ')}]`);
     sheets[sheetName] = {
       headers: paddedRows[0] || [],
       rows: paddedRows,

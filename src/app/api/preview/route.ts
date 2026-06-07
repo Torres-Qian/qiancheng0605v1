@@ -79,6 +79,7 @@ function processFileWithRule(
   let diagnostic: Record<string, any> = {};
 
   // 多Sheet合并
+  console.log(`[Preview] sheetMode=${ruleConfig.sheetMode}, 合并前rows=${rawData.rows.length}, sheets数=${Object.keys(rawData.sheets || {}).length}`);
   if (ruleConfig.sheetMode === 'all') {
     const headerRowIdx = ruleConfig.headerRow - 1;
     rawData = mergeSheets(rawData, headerRowIdx);
@@ -364,7 +365,39 @@ function processSingleOrderInternalWithDiag(
     // tailText 包含全量数据行，确保表头之前的尾部信息也能被提取到
     const tailText = dataRows.map((r: string[]) => r.join(' ')).join('\n');
 
-    // 预先提取通用字段，避免每行重复计算
+    // 获取行号→Sheet名称映射（合并Sheet时使用）
+    const rowSheetMap = (rawData.metadata as any)?.rowSheetMap as string[] | undefined;
+
+    // 为指定行获取其所属Sheet的尾部文本
+    // 注：rowSheetMap 是 skipRows 之前的索引，需加上 skipRows.top 偏移
+    const rowOffset = ruleConfig.skipRows.top || 0;
+    function getTailTextForRow(rowIdx: number): string {
+      const sheetName = rowSheetMap?.[rowIdx + rowOffset];
+      if (!sheetName || !rawData.sheets?.[sheetName]) return tailText;
+      return rawData.sheets[sheetName].rows.map((r: string[]) => r.join(' ')).join('\n');
+    }
+
+    // 判断当前行是否属于其Sheet的底部跳过范围（columnSkipBottomRows）
+    // 每个Sheet独立计算：从所属Sheet末尾往前数N行
+    const sheetRowCount: Record<string, number> = {};
+    if (rowSheetMap && ruleConfig.columnSkipBottomRows && ruleConfig.columnSkipBottomRows > 0) {
+      for (const sn of rowSheetMap) {
+        sheetRowCount[sn] = (sheetRowCount[sn] || 0) + 1;
+      }
+    }
+    function isInSheetBottom(rowIdx: number): boolean {
+      if (!rowSheetMap || !ruleConfig.columnSkipBottomRows) return false;
+      const sn = rowSheetMap[rowIdx + rowOffset];
+      if (!sn) return false;
+      // 往后数还有多少行属于同一个Sheet
+      let remaining = 0;
+      for (let j = rowIdx + rowOffset; j < rowSheetMap.length && rowSheetMap[j] === sn; j++) {
+        remaining++;
+      }
+      return remaining <= ruleConfig.columnSkipBottomRows;
+    }
+
+    // 预先提取通用字段（仅 static 类型，tailRegion 由每行独立提取避免跨Sheet污染）
     const commonFields: (keyof FieldMapping)[] = [
       'externalCode', 'recipientStore', 'recipientName',
       'recipientPhone', 'recipientAddress', 'remark',
@@ -376,7 +409,8 @@ function processSingleOrderInternalWithDiag(
 
       if (item.source === 'static' && item.value) {
         mergedDefaults[field] = item.value;
-      } else if (item.source === 'tailRegion' && item.matchPattern) {
+      } else if (item.source === 'tailRegion' && item.matchPattern && !rowSheetMap) {
+        // 仅在非多Sheet合并时预提取，多Sheet时由每行独立提取避免跨Sheet串值
         const extracted = extractFromTail(tailText, item.matchPattern, field);
         if (extracted) mergedDefaults[field] = extracted;
       }
@@ -394,7 +428,11 @@ function processSingleOrderInternalWithDiag(
         continue;
       }
 
-      const mapped = mapFields(row, headers, ruleConfig.fieldMapping, tailText, mergedDefaults);
+      // 每个Sheet独立跳过底部行（columnSkipBottomRows）
+      if (isInSheetBottom(i)) continue;
+
+      const rowTailText = getTailTextForRow(i);
+      const mapped = mapFields(row, headers, ruleConfig.fieldMapping, rowTailText, mergedDefaults);
 
       // 兜底保护：强制注入 static/tailRegion 配置值
       for (const field of commonFields) {
@@ -403,7 +441,7 @@ function processSingleOrderInternalWithDiag(
         if (item.source === 'static' && item.value) {
           mapped[field] = item.value;
         } else if (item.source === 'tailRegion' && item.matchPattern) {
-          const v = extractFromTail(tailText, item.matchPattern, field);
+          const v = extractFromTail(rowTailText, item.matchPattern, field);
           if (v) mapped[field] = v;
         }
       }
@@ -414,16 +452,16 @@ function processSingleOrderInternalWithDiag(
       }
 
       records.push({
-        externalCode: mapped.externalCode || mergedDefaults.externalCode || '',
-        recipientStore: mapped.recipientStore || mergedDefaults.recipientStore || '',
-        recipientName: mapped.recipientName || mergedDefaults.recipientName || '',
-        recipientPhone: mapped.recipientPhone || mergedDefaults.recipientPhone || '',
-        recipientAddress: mapped.recipientAddress || mergedDefaults.recipientAddress || '',
+        externalCode: (mapped.externalCode != null && mapped.externalCode !== '') ? mapped.externalCode : (mergedDefaults.externalCode || ''),
+        recipientStore: (mapped.recipientStore != null && mapped.recipientStore !== '') ? mapped.recipientStore : (mergedDefaults.recipientStore || ''),
+        recipientName: (mapped.recipientName != null && mapped.recipientName !== '') ? mapped.recipientName : (mergedDefaults.recipientName || ''),
+        recipientPhone: (mapped.recipientPhone != null && mapped.recipientPhone !== '') ? mapped.recipientPhone : (mergedDefaults.recipientPhone || ''),
+        recipientAddress: (mapped.recipientAddress != null && mapped.recipientAddress !== '') ? mapped.recipientAddress : (mergedDefaults.recipientAddress || ''),
         skuCode: mapped.skuCode || '',
         skuName: mapped.skuName || '',
         skuQuantity: parseInt(mapped.skuQuantity, 10) || 0,
         skuSpec: mapped.skuSpec || '',
-        remark: mapped.remark || mergedDefaults.remark || '',
+        remark: (mapped.remark != null && mapped.remark !== '') ? mapped.remark : (mergedDefaults.remark || ''),
         rowIndex: rowIndex++,
       });
     }
