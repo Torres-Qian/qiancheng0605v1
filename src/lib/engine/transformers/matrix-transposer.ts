@@ -1,5 +1,5 @@
 import { WaybillRecord } from '@/types/waybill';
-import { MatrixTransformConfig, FieldMapping, RawDataGrid } from '@/types/rule';
+import { MatrixTransformConfig, FieldMapping, FieldMappingItem, RawDataGrid } from '@/types/rule';
 
 // 通过列名查找列索引
 function findColumnIndex(headers: string[], colName: string): number {
