@@ -85,6 +85,32 @@ export function transposeMatrixWithMapping(
   const headerRow = data.rows[headerRowIndex] || [];
   const dataStartRow = headerRowIndex + 1;
 
+  // 构建尾部文本，用于 tailRegion 提取（全量数据行，确保表头之前的信息也能提取）
+  const tailText = data.rows.map(r => r.join(' ')).join('\n');
+
+  // 辅助：从 fieldMapping 取值
+  const getFieldValue = (item: FieldMappingItem | undefined, row: string[]): string => {
+    if (!item) return '';
+    if (item.source === 'static' && item.value) return item.value;
+    if (item.source === 'column' && item.value) {
+      const colIdx = findColumnIndex(headerRow, item.value);
+      if (colIdx >= 0 && colIdx < row.length) return (row[colIdx] || '').trim();
+    }
+    return '';
+  };
+
+  // 辅助：从 tailText 提取（全局一次）
+  const getTailValue = (item: FieldMappingItem | undefined): string => {
+    if (!item || !item.matchPattern) return '';
+    // 简单关键词自动构建正则
+    const hasRegexChars = /[()\[\]{}|\\^$.*+?]/.test(item.matchPattern);
+    const regex = hasRegexChars
+      ? new RegExp(item.matchPattern, 'i')
+      : new RegExp(item.matchPattern + '\\s*[:：]?\\s*(\\S+)', 'i');
+    const match = tailText.match(regex);
+    return match ? (match[1] || match[0]).trim() : '';
+  };
+
   // 用 fieldMapping 从原始行中提取 SKU 信息
   for (const record of records) {
     const rawRow = (record as any)._rawRow as string[] | undefined;
@@ -115,17 +141,43 @@ export function transposeMatrixWithMapping(
       }
     }
 
-    // 外部编码
-    if (fieldMapping.externalCode?.source === 'column' && fieldMapping.externalCode.value) {
-      const colIdx = findColumnIndex(headerRow, fieldMapping.externalCode.value);
-      if (colIdx >= 0 && colIdx < rawRow.length) {
-        record.externalCode = (rawRow[colIdx] || '').trim();
-      }
-    }
+    // 外部编码 — 从行/尾部提取
+    const extVal = getFieldValue(fieldMapping.externalCode, rawRow);
+    if (extVal) record.externalCode = extVal;
+
+    // 收件人姓名 / 电话 / 地址 / 备注 — 优先 static，其次 tailRegion
+    const recipientNameVal = getFieldValue(fieldMapping.recipientName, rawRow);
+    if (recipientNameVal) record.recipientName = recipientNameVal;
+
+    const recipientPhoneVal = getFieldValue(fieldMapping.recipientPhone, rawRow);
+    if (recipientPhoneVal) record.recipientPhone = recipientPhoneVal;
+
+    const recipientAddressVal = getFieldValue(fieldMapping.recipientAddress, rawRow);
+    if (recipientAddressVal) record.recipientAddress = recipientAddressVal;
+
+    const remarkVal = getFieldValue(fieldMapping.remark, rawRow);
+    if (remarkVal) record.remark = remarkVal;
 
     // 清理临时字段
     delete (record as any)._rawRow;
     delete (record as any)._storeCol;
+  }
+
+  // 全局提取一次 tailRegion 字段，应用到所有记录
+  const tailRecipientName = !records.some(r => r.recipientName) ? getTailValue(fieldMapping.recipientName) : '';
+  const tailRecipientPhone = !records.some(r => r.recipientPhone) ? getTailValue(fieldMapping.recipientPhone) : '';
+  const tailRecipientAddress = !records.some(r => r.recipientAddress) ? getTailValue(fieldMapping.recipientAddress) : '';
+  const tailRemark = !records.some(r => r.remark) ? getTailValue(fieldMapping.remark) : '';
+  const tailExternalCode = !records.some(r => r.externalCode) ? getTailValue(fieldMapping.externalCode) : '';
+
+  if (tailRecipientName || tailRecipientPhone || tailRecipientAddress || tailRemark || tailExternalCode) {
+    for (const record of records) {
+      if (tailRecipientName) record.recipientName = tailRecipientName;
+      if (tailRecipientPhone) record.recipientPhone = tailRecipientPhone;
+      if (tailRecipientAddress) record.recipientAddress = tailRecipientAddress;
+      if (tailRemark) record.remark = tailRemark;
+      if (tailExternalCode) record.externalCode = tailExternalCode;
+    }
   }
 
   return records;

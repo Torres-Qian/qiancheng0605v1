@@ -105,7 +105,7 @@ export default function WaybillsPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-6" style={{ width: '100%' }}>
       <div className="flex items-center gap-2 text-sm">
         <Link href="/" className="text-[var(--color-text-tertiary)] hover:text-[var(--color-primary)]">首页</Link>
         <ChevronRight className="w-4 h-4 text-[var(--color-text-placeholder)]" />

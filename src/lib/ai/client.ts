@@ -70,7 +70,7 @@ export async function analyzeFileAndGenerateRule(
 你需要先判断文件属于哪种类型，然后生成对应的规则：
 
 ## 类型一：标准表格（每行是一条完整记录）
-- 特征：第1行是表头，从第2行起每行包含完整信息
+- 特征：第1行是表头，从第2行起每行包含完整信息（Excel 和 PDF 均适用）
 - fieldMapping 示例：skuCode 的 value 填 "物品编码"（表头列名），source 填 "column"
 - 如果收货人信息在表格外的尾部区域，使用 source: "tailRegion"
 
@@ -102,6 +102,7 @@ export async function analyzeFileAndGenerateRule(
     "dataStartRow": 数据起始行号,
     "dataEndMode": "auto",
     "skipRowsPattern": "合计|总计|小计",
+    "columnSkipBottomRows": 0,
     "fieldMapping": { 字段映射对象 },
     "aggregation": { "enabled": false, "groupByField": "externalCode", "sharedFields": [] },
     "matrixTransform": null 或矩阵转置配置对象,
@@ -118,24 +119,51 @@ export async function analyzeFileAndGenerateRule(
   }
 }
 
-## 字段定义：
-- externalCode: 外部编码/配送单号
-- recipientStore: 收货门店
-- recipientName: 收件人姓名
-- recipientPhone: 收件人电话
-- recipientAddress: 收件人地址
-- skuCode: SKU物品编码
-- skuName: SKU物品名称
-- skuQuantity: SKU发货数量
-- skuSpec: SKU规格型号
-- remark: 备注
+## 字段定义与列名匹配规则（非常重要！）：
+根据表头列名的语义，将其映射到最合适的字段。source 一律设为 "column"，value 填列名原文。
 
-## 重要规则：
-1. fieldMapping 中 value 永远填表头的列名文本（字符串），不能填数字索引
-2. 如果是矩阵转置类型，matrixTransform 中 startCol 和 endCol 填列索引数字（从0开始）
-3. 仔细分析表头行，找出每个字段对应的列名
-4. 如果某个字段在表格中找不到对应列，source 设为 "static"，value 设为 ""
-5. confidence 每个字段都要有，high/medium/low`;
+关键区分原则：
+- 含"外部"前缀的编码列 → externalCode（出现在表格外的订单级信息）
+- 不含"外部"的商品/物品编码列 → skuCode（每行一个的 SKU 级信息）
+
+- externalCode（外部编码/单据号）:
+  匹配 → "外部商品编码"、"外部编码"、"外部单号"、"订单号"、"配送单号"、"单据号"、"出库单号"、"运单号"
+  ⚠️ 注意：带"外部"前缀的商品编码优先匹配这里
+
+- recipientStore（收货门店）:
+  匹配 → "收货门店"、"收货机构"、"门店"、"店铺"、"收货方"、"客户名称"
+
+- recipientName（收件人姓名）:
+  匹配 → "收货人"、"收件人"、"联系人"、"客户姓名"
+
+- recipientPhone（收件人电话）:
+  匹配 → "收货电话"、"联系电话"、"手机号"、"收件人电话"
+
+- recipientAddress（收件人地址）:
+  匹配 → "收货地址"、"地址"、"详细地址"、"配送地址"
+
+- skuCode（SKU物品编码）:
+  匹配 → "物品编码"、"商品编码"、"SKU编码"、"产品编码"、"货号"、"款号"、"物料编码"
+  ⚠️ 不含"外部"前缀的编码列才匹配这里
+
+- skuName（SKU物品名称）:
+  匹配 → "物品名称"、"商品名称"、"SKU名称"、"产品名称"、"品名"、"货品名称"
+
+- skuQuantity（SKU发货数量）:
+  匹配 → "数量"、"发货数量"、"配送数量"、"出库数量"、"件数"
+
+- skuSpec（SKU规格型号）:
+  匹配 → "规格"、"型号"、"规格型号"、"尺码"、"颜色"
+
+- remark（备注）:
+  匹配 → "备注"、"说明"、"标记"
+
+## 匹配优先级（按表头列的顺序逐个匹配）：
+1. 遍历表头每个列名，用上述规则匹配到最合适的字段
+2. 每个字段只匹配一次（先到先得）
+3. 列名含"外部" → 优先匹配 externalCode；纯"商品编码"/"物品编码" → 匹配 skuCode
+4. 找不到匹配的列，source 设为 "static"，value 设为 ""
+5. confidence 每个字段都要有：列名精确匹配为 high，模糊匹配为 medium，未匹配为 low`;
 
   const userPrompt = `请分析以下文件并生成解析规则。
 

@@ -6,12 +6,12 @@ import { skipRows, skipPatternRows } from './preprocessors/skip-rows';
 import { detectCards, extractFromCard } from './preprocessors/card-splitter';
 import { mergeSheets } from './preprocessors/sheet-merger';
 import { splitOrders } from './preprocessors/order-splitter';
-import { mapFields } from './mappers/column-mapper';
+import { mapFields, extractFromTail } from './mappers/column-mapper';
 import { aggregateRecords } from './transformers/aggregator';
 import { transposeMatrix, transposeMatrixWithMapping } from './transformers/matrix-transposer';
 import { splitCell } from './transformers/cell-splitter';
 import { validateRecords } from './validators';
-import { RawDataGrid, RuleConfig } from '@/types/rule';
+import { RawDataGrid, RuleConfig, FieldMapping } from '@/types/rule';
 import { WaybillRecord, ValidationError } from '@/types/waybill';
 
 export interface ParseResult {
@@ -54,7 +54,8 @@ export async function executeParse(file: File, ruleConfig: RuleConfig): Promise<
 
   // 2. 多Sheet合并
   if (ruleConfig.sheetMode === 'all') {
-    rawData = mergeSheets(rawData);
+    const headerRowIdx = ruleConfig.headerRow - 1;
+    rawData = mergeSheets(rawData, headerRowIdx);
   } else if (ruleConfig.sheetMode === 'multi' && ruleConfig.sheetNames) {
     // 按指定Sheet名合并
     const mergedRows: string[][] = [];
@@ -150,16 +151,27 @@ function processSingleOrder(
     return [];
   }
 
-  // 确定表头和数据行
-  const headerRowIndex = ruleConfig.headerRow - 1;
+  // 确定表头和数据行（表头行号相对于跳过之后的数据行）
+  const headerRowIndex = Math.max(0, ruleConfig.headerRow - 1 - ruleConfig.skipRows.top);
   const headers = headerRowIndex >= 0 && headerRowIndex < dataRows.length
     ? dataRows[headerRowIndex]
     : [];
 
-  const dataStartRow = Math.max(ruleConfig.dataStartRow - 1, headerRowIndex + 1);
-  const dataEndRow = ruleConfig.dataEndMode === 'fixed' && ruleConfig.dataEndRow
+  const globalStartRow = Math.max(ruleConfig.dataStartRow - 1, headerRowIndex + 1);
+  const globalEndRow = ruleConfig.dataEndMode === 'fixed' && ruleConfig.dataEndRow
     ? ruleConfig.dataEndRow - 1
     : dataRows.length;
+
+  // 数据列映射范围（可覆盖全局范围，但不能在表头之前）
+  const dataStartRow = ruleConfig.dataColumnStartRow
+    ? Math.max(ruleConfig.dataColumnStartRow - 1, headerRowIndex + 1)
+    : globalStartRow;
+  // 列映射阶段跳过底部行：缩减 dataEndRow
+  let dataEndRow = globalEndRow;
+  if (ruleConfig.columnSkipBottomRows && ruleConfig.columnSkipBottomRows > 0) {
+    dataEndRow = Math.min(dataEndRow, dataRows.length - ruleConfig.columnSkipBottomRows);
+    if (dataEndRow < dataStartRow) dataEndRow = dataStartRow; // 兜底保护
+  }
 
   // 矩阵转置 + 字段映射：先转置门店，再用列映射填充SKU信息
   if (ruleConfig.matrixTransform?.enabled) {
@@ -172,32 +184,81 @@ function processSingleOrder(
   } else {
     // 标准行映射
     let rowIndex = 0;
-    const tailText = dataRows.slice(dataStartRow).map(r => r.join(' ')).join('\n');
+    let skippedCount = 0;
+    // tailText 包含全量数据行，确保表头之前的尾部信息也能被提取到
+    const tailText = dataRows.map(r => r.join(' ')).join('\n');
+
+    // 预先提取通用字段，避免每行重复计算
+    const commonFields: (keyof FieldMapping)[] = [
+      'externalCode', 'recipientStore', 'recipientName',
+      'recipientPhone', 'recipientAddress', 'remark',
+    ];
+    const mergedDefaults: Record<string, string> = { ...ruleConfig.defaultValues };
+    for (const field of commonFields) {
+      const item = ruleConfig.fieldMapping[field];
+      if (!item || mergedDefaults[field]) continue; // 已有默认值则跳过
+
+      if (item.source === 'static' && item.value) {
+        // 静态值直接采用
+        mergedDefaults[field] = item.value;
+      } else if (item.source === 'tailRegion' && item.matchPattern) {
+        // 尾部提取执行一次
+        const extracted = extractFromTail(tailText, item.matchPattern, field);
+        if (extracted) mergedDefaults[field] = extracted;
+      }
+    }
+
+    // 列映射跳过正则（匹配到的行不参与列映射）
+    const colSkipRegex = ruleConfig.columnSkipPattern ? new RegExp(ruleConfig.columnSkipPattern, 'i') : null;
 
     for (let i = dataStartRow; i < dataEndRow && i < dataRows.length; i++) {
       const row = dataRows[i];
       if (row.every(c => !c)) continue; // 跳过空行
 
-      const mapped = mapFields(row, headers, ruleConfig.fieldMapping, tailText, ruleConfig.defaultValues);
+      // 列映射跳过检查
+      if (colSkipRegex && colSkipRegex.test(row.join(' '))) {
+        skippedCount++;
+        continue;
+      }
+
+      const mapped = mapFields(row, headers, ruleConfig.fieldMapping, tailText, mergedDefaults);
+
+      // 兜底保护：强制注入 static/tailRegion 配置值，确保通用字段永不丢失
+      for (const field of commonFields) {
+        const item = ruleConfig.fieldMapping[field];
+        if (!item || mapped[field]) continue;
+        if (item.source === 'static' && item.value) {
+          mapped[field] = item.value;
+        } else if (item.source === 'tailRegion' && item.matchPattern) {
+          const v = extractFromTail(tailText, item.matchPattern, field);
+          if (v) mapped[field] = v;
+        }
+      }
 
       // 如果所有SKU字段都为空，可能是非数据行
       if (!mapped.skuCode && !mapped.skuName && !mapped.skuQuantity) {
+        skippedCount++;
         continue;
       }
 
       records.push({
-        externalCode: mapped.externalCode || '',
-        recipientStore: mapped.recipientStore || '',
-        recipientName: mapped.recipientName || '',
-        recipientPhone: mapped.recipientPhone || '',
-        recipientAddress: mapped.recipientAddress || '',
+        externalCode: mapped.externalCode || mergedDefaults.externalCode || '',
+        recipientStore: mapped.recipientStore || mergedDefaults.recipientStore || '',
+        recipientName: mapped.recipientName || mergedDefaults.recipientName || '',
+        recipientPhone: mapped.recipientPhone || mergedDefaults.recipientPhone || '',
+        recipientAddress: mapped.recipientAddress || mergedDefaults.recipientAddress || '',
         skuCode: mapped.skuCode || '',
         skuName: mapped.skuName || '',
         skuQuantity: parseInt(mapped.skuQuantity, 10) || 0,
         skuSpec: mapped.skuSpec || '',
-        remark: mapped.remark || '',
+        remark: mapped.remark || mergedDefaults.remark || '',
         rowIndex: rowIndex++,
       });
+    }
+
+    // 如果有数据行但全部被跳过，说明字段映射可能有问题
+    if (records.length === 0 && dataRows.length > dataStartRow) {
+      warnings.push('未提取到任何数据，请检查"字段映射"中SKU字段的列名是否与文件表头匹配');
     }
   }
 

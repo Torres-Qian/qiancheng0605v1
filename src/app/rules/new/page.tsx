@@ -6,10 +6,11 @@ import Link from 'next/link';
 import { FileDropZone } from '@/components/upload/FileDropZone';
 import { AiRuleGenerator } from '@/components/rules/AiRuleGenerator';
 import { RuleEditor } from '@/components/rules/RuleEditor';
+import { PreviewPanel } from '@/components/rules/PreviewPanel';
 import { showToast } from '@/components/shared/Toast';
 import { AiAnalysisResult, RuleConfig, FileType } from '@/types/rule';
 import { detectFileType } from '@/lib/utils/file';
-import { ChevronRight, ArrowLeft, Save, Play } from 'lucide-react';
+import { ChevronRight, ArrowLeft, Save, Play, Eye } from 'lucide-react';
 
 export default function NewRulePage() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function NewRulePage() {
   const [ruleName, setRuleName] = useState('');
   const [ruleDesc, setRuleDesc] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
 
   const detectedType = file ? detectFileType(file.name) : undefined;
   const fileType: FileType | undefined = detectedType === 'unknown' ? undefined : detectedType;
@@ -74,7 +76,7 @@ export default function NewRulePage() {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6" style={{ width: '100%' }}>
       <div className="flex items-center gap-2 text-sm">
         <Link href="/" className="text-[var(--color-text-tertiary)] hover:text-[var(--color-primary)]">首页</Link>
         <ChevronRight className="w-4 h-4 text-[var(--color-text-placeholder)]" />
@@ -181,12 +183,31 @@ export default function NewRulePage() {
 
       {/* 规则编辑器 */}
       {(step === 'edit' || aiResult) && (
-        <RuleEditor
-          initialConfig={ruleConfig || undefined}
-          onConfigChange={setRuleConfig}
-          aiResult={aiResult}
-          fileType={fileType}
-        />
+        <>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-[var(--color-text-primary)]">规则配置</h2>
+            <button
+              onClick={() => setShowPreview(!showPreview)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+            >
+              <Eye className="w-4 h-4" />
+              {showPreview ? '隐藏预览' : '预览效果'}
+            </button>
+          </div>
+          <RuleEditor
+            initialConfig={ruleConfig || undefined}
+            onConfigChange={setRuleConfig}
+            aiResult={aiResult}
+            fileType={fileType}
+          />
+          {showPreview && (
+            <PreviewPanel
+              file={file}
+              ruleConfig={ruleConfig}
+              onFileChange={setFile}
+            />
+          )}
+        </>
       )}
     </div>
   );

@@ -50,29 +50,5 @@ export function validateRecords(records: WaybillRecord[]): ValidationError[] {
     }
   });
 
-  // 外部编码同批次重复检测
-  const codeMap = new Map<string, number[]>();
-  records.forEach((record, index) => {
-    const code = record.externalCode?.trim();
-    if (code) {
-      if (!codeMap.has(code)) codeMap.set(code, []);
-      codeMap.get(code)!.push(record.rowIndex ?? index);
-    }
-  });
-  codeMap.forEach((indices, code) => {
-    if (indices.length > 1) {
-      indices.forEach((idx, i) => {
-        if (i > 0) {
-          allErrors.push({
-            rowIndex: idx,
-            field: 'externalCode',
-            message: `外部编码"${code}"与第${indices[0] + 1}行重复`,
-            severity: 'error',
-          });
-        }
-      });
-    }
-  });
-
   return allErrors;
 }

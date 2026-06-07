@@ -16,6 +16,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN" className="h-full">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `
+          if (!Promise.try) {
+            Promise.try = function(executor) {
+              return new Promise(function(resolve) {
+                resolve(typeof executor === 'function' ? executor() : executor);
+              });
+            };
+          }
+        `}} />
+      </head>
       <body className="min-h-full">
         <ConfirmDialogProvider>
           <AppLayout>{children}</AppLayout>

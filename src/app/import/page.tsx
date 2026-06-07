@@ -11,7 +11,8 @@ import { useImportStore } from '@/stores/import-store';
 import { executeParse } from '@/lib/engine';
 import { ParseRule, RuleConfig } from '@/types/rule';
 import { detectFileType } from '@/lib/utils/file';
-import { ArrowLeft, Plus, ChevronRight, FileText, Settings, Sparkles } from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
+import { ArrowLeft, Plus, ChevronRight, FileText, Settings, Sparkles, Play, Check } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ImportPage() {
@@ -19,6 +20,7 @@ export default function ImportPage() {
   const store = useImportStore();
   const [rules, setRules] = useState<ParseRule[]>([]);
   const [loadingRules, setLoadingRules] = useState(true);
+  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [parseProgress, setParseProgress] = useState({ current: 0, total: 0, percent: 0 });
 
@@ -40,6 +42,7 @@ export default function ImportPage() {
 
   const handleClearFile = () => {
     store.reset();
+    setSelectedRuleId(null);
   };
 
   // 使用已有规则执行解析
@@ -72,6 +75,16 @@ export default function ImportPage() {
         return;
       }
 
+      if (result.records.length === 0) {
+        const warning = result.parseWarnings.length > 0
+          ? result.parseWarnings[0]
+          : '未提取到任何数据，请检查规则"字段映射"中SKU字段列名是否与文件匹配';
+        showToast('warning', warning);
+        store.setStep('select_rule');
+        setParsing(false);
+        return;
+      }
+
       store.setRecords(result.records);
       store.setValidationErrors(result.validationErrors);
       store.setBatchId(crypto.randomUUID());
@@ -92,9 +105,16 @@ export default function ImportPage() {
   // 新建规则
   const handleNewRule = () => {
     if (store.file) {
-      // 将文件名存入 sessionStorage 供新建规则页使用
       sessionStorage.setItem('newRuleFileName', store.file.name);
       router.push('/rules/new');
+    }
+  };
+
+  // 点击开始导入
+  const handleStartImport = () => {
+    const selectedRule = rules.find(r => r.id === selectedRuleId);
+    if (selectedRule) {
+      handleUseRule(selectedRule);
     }
   };
 
@@ -102,7 +122,7 @@ export default function ImportPage() {
   const filteredRules = rules.filter(r => !fileType || r.fileType === fileType);
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    <div className="space-y-6" style={{ width: '100%' }}>
       {/* 步骤指示器 */}
       <div className="flex items-center gap-2 text-sm">
         <Link href="/" className="text-[var(--color-text-tertiary)] hover:text-[var(--color-primary)]">首页</Link>
@@ -158,30 +178,60 @@ export default function ImportPage() {
               }
             />
           ) : (
-            <div className="space-y-2">
-              {filteredRules.map(rule => (
-                <button
-                  key={rule.id}
-                  onClick={() => handleUseRule(rule)}
-                  className="w-full flex items-center justify-between p-4 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-light)] transition-all duration-200 group text-left"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-[var(--color-surface-hover)] flex items-center justify-center">
-                      <FileText className="w-4 h-4 text-[var(--color-text-secondary)]" />
+            <>
+              <div className="space-y-2">
+                {filteredRules.map(rule => (
+                  <button
+                    key={rule.id}
+                    onClick={() => setSelectedRuleId(selectedRuleId === rule.id ? null : rule.id)}
+                    className={cn(
+                      'w-full flex items-center justify-between p-4 rounded-lg border transition-all duration-200 group text-left',
+                      selectedRuleId === rule.id
+                        ? 'border-[var(--color-primary)] bg-[var(--color-primary-light)] shadow-sm'
+                        : 'border-[var(--color-border)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-light)]'
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        'w-9 h-9 rounded-lg flex items-center justify-center',
+                        selectedRuleId === rule.id ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-surface-hover)]'
+                      )}>
+                        {selectedRuleId === rule.id ? (
+                          <Check className="w-4 h-4 text-white" />
+                        ) : (
+                          <FileText className="w-4 h-4 text-[var(--color-text-secondary)]" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-[var(--color-text-primary)] group-hover:text-[var(--color-primary)] transition-colors">
+                          {rule.name}
+                        </p>
+                        <p className="text-xs text-[var(--color-text-tertiary)]">
+                          {rule.fileType} · {rule.createdBy === 'ai_assisted' ? 'AI辅助' : '手动创建'}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-[var(--color-text-primary)] group-hover:text-[var(--color-primary)] transition-colors">
-                        {rule.name}
-                      </p>
-                      <p className="text-xs text-[var(--color-text-tertiary)]">
-                        {rule.fileType} · {rule.createdBy === 'ai_assisted' ? 'AI辅助' : '手动创建'}
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-[var(--color-text-placeholder)] group-hover:text-[var(--color-primary)] transition-colors" />
-                </button>
-              ))}
-            </div>
+                    <ChevronRight className={cn(
+                      'w-4 h-4 transition-colors',
+                      selectedRuleId === rule.id ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-placeholder)] group-hover:text-[var(--color-primary)]'
+                    )} />
+                  </button>
+                ))}
+              </div>
+
+              {/* 开始导入按钮 - 选择规则后显示 */}
+              {selectedRuleId && (
+                <div className="mt-4 pt-4 border-t border-[var(--color-border)] flex justify-center">
+                  <button
+                    onClick={handleStartImport}
+                    className="inline-flex items-center justify-center gap-2 px-8 py-2.5 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)] transition-colors shadow-sm"
+                  >
+                    <Play className="w-4 h-4" />
+                    开始导入
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

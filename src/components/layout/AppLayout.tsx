@@ -11,7 +11,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
         <main className="flex-1 overflow-auto">
-          <div className="p-4 lg:p-6 max-w-[1400px] mx-auto w-full">
+          <div className="p-4 lg:p-6 w-full">
             {children}
           </div>
         </main>

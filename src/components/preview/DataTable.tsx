@@ -12,25 +12,27 @@ interface DataTableProps {
   onUpdateRecord: (index: number, updates: Partial<WaybillRecord>) => void;
   onDeleteRecord: (index: number) => void;
   onAddRecord: () => void;
+  readOnly?: boolean;
 }
 
 const columns = [
   { key: 'rowIndex', label: '#', width: 50, editable: false },
-  { key: 'externalCode', label: '外部编码', width: 150, editable: true },
-  { key: 'recipientStore', label: '收货门店', width: 180, editable: true },
-  { key: 'recipientName', label: '收件人姓名', width: 120, editable: true },
-  { key: 'recipientPhone', label: '收件人电话', width: 130, editable: true },
-  { key: 'recipientAddress', label: '收件人地址', width: 220, editable: true },
-  { key: 'skuCode', label: 'SKU编码', width: 130, editable: true, required: true },
-  { key: 'skuName', label: 'SKU名称', width: 150, editable: true, required: true },
-  { key: 'skuQuantity', label: '数量', width: 80, editable: true, required: true, type: 'number' },
-  { key: 'skuSpec', label: '规格', width: 120, editable: true },
-  { key: 'remark', label: '备注', width: 150, editable: true },
+  { key: 'externalCode', label: '外部编码', width: 180, editable: true },
+  { key: 'recipientStore', label: '收货门店', width: 200, editable: true },
+  { key: 'recipientName', label: '收件人姓名', width: 130, editable: true },
+  { key: 'recipientPhone', label: '收件人电话', width: 140, editable: true },
+  { key: 'recipientAddress', label: '收件人地址', width: 280, editable: true },
+  { key: 'skuCode', label: 'SKU编码', width: 150, editable: true, required: true },
+  { key: 'skuName', label: 'SKU名称', width: 180, editable: true, required: true },
+  { key: 'skuQuantity', label: '数量', width: 90, editable: true, required: true, type: 'number' },
+  { key: 'skuSpec', label: '规格', width: 140, editable: true },
+  { key: 'remark', label: '备注', width: 180, editable: true },
   { key: 'actions', label: '操作', width: 60, editable: false },
 ];
 
-export function DataTable({ records, errors, onUpdateRecord, onDeleteRecord, onAddRecord }: DataTableProps) {
+export function DataTable({ records, errors, onUpdateRecord, onDeleteRecord, onAddRecord, readOnly = false }: DataTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const readOnlyColumns = useMemo(() => columns.filter(c => c.key !== 'actions'), []);
 
   const virtualizer = useVirtualizer({
     count: records.length,
@@ -54,7 +56,7 @@ export function DataTable({ records, errors, onUpdateRecord, onDeleteRecord, onA
     return rowErrors?.find(e => e.field === field);
   };
 
-  const totalWidth = columns.reduce((sum, c) => sum + c.width, 0);
+  const totalWidth = (readOnly ? readOnlyColumns : columns).reduce((sum, c) => sum + c.width, 0);
 
   return (
     <div className="bg-white rounded-xl border border-[var(--color-border)] overflow-hidden">
@@ -71,13 +73,15 @@ export function DataTable({ records, errors, onUpdateRecord, onDeleteRecord, onA
             </span>
           )}
         </div>
-        <button
-          onClick={onAddRecord}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-[var(--color-primary-light)] text-[var(--color-primary-darker)] hover:bg-[var(--color-info-border)] transition-colors font-medium"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          新增行
-        </button>
+        {!readOnly && (
+          <button
+            onClick={onAddRecord}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-[var(--color-primary-light)] text-[var(--color-primary-darker)] hover:bg-[var(--color-info-border)] transition-colors font-medium"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            新增行
+          </button>
+        )}
       </div>
 
       {/* 表格 */}
@@ -87,7 +91,7 @@ export function DataTable({ records, errors, onUpdateRecord, onDeleteRecord, onA
           className="sticky top-0 z-10 flex bg-[var(--color-surface-secondary)] border-b border-[var(--color-border)]"
           style={{ minWidth: totalWidth }}
         >
-          {columns.map(col => (
+          {(readOnly ? readOnlyColumns : columns).map(col => (
             <div
               key={col.key}
               className="px-3 py-2.5 text-xs font-medium text-[var(--color-text-tertiary)] flex-shrink-0"
@@ -117,7 +121,7 @@ export function DataTable({ records, errors, onUpdateRecord, onDeleteRecord, onA
                 )}
                 style={{ height: virtualRow.size, transform: `translateY(${virtualRow.start}px)` }}
               >
-                {columns.map(col => {
+                {(readOnly ? readOnlyColumns : columns).map(col => {
                   if (col.key === 'rowIndex') {
                     return (
                       <div key={col.key} className="px-3 py-2 text-xs text-[var(--color-text-tertiary)] flex items-center flex-shrink-0" style={{ width: col.width }}>
@@ -142,6 +146,18 @@ export function DataTable({ records, errors, onUpdateRecord, onDeleteRecord, onA
 
                   const fieldError = getFieldError(record.rowIndex ?? virtualRow.index, col.key);
                   const value = (record as any)[col.key];
+
+                  // readOnly 模式：只显示文本，不显示输入框
+                  if (readOnly) {
+                    return (
+                      <div key={col.key} className={cn(
+                        'px-3 py-2 text-xs flex items-center flex-shrink-0 truncate',
+                        fieldError ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-primary)]'
+                      )} style={{ width: col.width }} title={String(value ?? '')}>
+                        {value ?? '-'}
+                      </div>
+                    );
+                  }
 
                   return (
                     <div key={col.key} className="px-3 py-1.5 flex items-center flex-shrink-0 relative" style={{ width: col.width }}>

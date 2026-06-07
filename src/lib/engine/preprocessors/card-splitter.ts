@@ -38,6 +38,8 @@ export function detectCards(data: RawDataGrid, config: CardDetectionConfig): Car
 // 从卡片中提取字段
 export function extractFromCard(card: CardBlock, config: CardDetectionConfig): Record<string, string> {
   const result: Record<string, string> = {};
+  if (!config.fieldsInsideCard || config.fieldsInsideCard.length === 0) return result;
+
   const allText = card.rows.map(r => r.join(' ')).join('\n');
 
   for (const fieldConfig of config.fieldsInsideCard) {

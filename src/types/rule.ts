@@ -80,9 +80,12 @@ export interface RuleConfig {
   headerRow: number;        // 表头所在行（从1开始）
   sheetMode: SheetMode;
   sheetNames?: string[];
-  dataStartRow: number;     // 数据起始行
+  dataStartRow: number;     // 数据起始行（全局）
   dataEndMode: DataEndMode;
   dataEndRow?: number;      // dataEndMode=fixed时指定
+  dataColumnStartRow?: number; // 数据列映射起始行（覆盖 dataStartRow）
+  dataColumnEndRow?: number;   // 数据列映射结束行（覆盖 dataEndRow，0表示自动）
+  columnSkipBottomRows?: number; // 列映射阶段跳过底部 N 行（如跳过"备注"等尾部信息行）
   fieldMapping: FieldMapping;
   aggregation: AggregationConfig;
   matrixTransform: MatrixTransformConfig | null;
@@ -90,6 +93,7 @@ export interface RuleConfig {
   cellSplitConfig: CellSplitConfig | null;
   multiOrderSplit: MultiOrderSplitConfig | null;
   skipRowsPattern: string;  // 跳过匹配的行（如"合计|总计"）
+  columnSkipPattern?: string; // 列映射跳过匹配模式（匹配到的行不生成记录）
   defaultValues: Record<string, string>;
   postProcessors: string[];
 }

@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { RuleEditor } from '@/components/rules/RuleEditor';
+import { PreviewPanel } from '@/components/rules/PreviewPanel';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { showToast } from '@/components/shared/Toast';
 import { ParseRule, RuleConfig } from '@/types/rule';
-import { ChevronRight, ArrowLeft, Save } from 'lucide-react';
+import { ChevronRight, ArrowLeft, Save, Eye } from 'lucide-react';
 
 export default function EditRulePage() {
   const params = useParams();
@@ -17,6 +18,8 @@ export default function EditRulePage() {
   const [ruleConfig, setRuleConfig] = useState<RuleConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     fetch(`/api/rules/${id}`)
@@ -66,7 +69,7 @@ export default function EditRulePage() {
   if (!rule) return null;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6" style={{ width: '100%' }}>
       <div className="flex items-center gap-2 text-sm">
         <Link href="/" className="text-[var(--color-text-tertiary)] hover:text-[var(--color-primary)]">首页</Link>
         <ChevronRight className="w-4 h-4 text-[var(--color-text-placeholder)]" />
@@ -78,6 +81,13 @@ export default function EditRulePage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-[var(--color-text-primary)]">编辑规则: {rule.name}</h1>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowPreview(!showPreview)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+          >
+            <Eye className="w-4 h-4" />
+            {showPreview ? '隐藏预览' : '预览效果'}
+          </button>
           <button
             onClick={() => router.back()}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors"
@@ -97,6 +107,14 @@ export default function EditRulePage() {
       </div>
 
       <RuleEditor initialConfig={ruleConfig || undefined} onConfigChange={setRuleConfig} />
+
+      {showPreview && (
+        <PreviewPanel
+          file={previewFile}
+          ruleConfig={ruleConfig}
+          onFileChange={setPreviewFile}
+        />
+      )}
     </div>
   );
 }
