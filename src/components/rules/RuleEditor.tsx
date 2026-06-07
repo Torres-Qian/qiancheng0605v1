@@ -26,7 +26,7 @@ function EditableNumberInput({ label, value, onChange, tip, placeholder }: {
         {tip && (
           <span className="relative cursor-help">
             <span className="inline-flex items-center justify-center w-3.5 h-3.5 text-[10px] leading-none rounded-full border border-[var(--color-text-tertiary)] text-[var(--color-text-tertiary)] opacity-60 group-hover:opacity-100 transition-opacity">?</span>
-            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 text-[11px] leading-relaxed text-white bg-gray-800 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg max-w-[220px] whitespace-normal text-center">
+            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-3 py-2 text-xs leading-relaxed text-white bg-[var(--color-primary-darker)] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg max-w-[280px] whitespace-normal text-center">
               {tip}
             </span>
           </span>
@@ -50,7 +50,7 @@ function LabelWithTip({ text, tip }: { text: string; tip?: string }) {
       {tip && (
         <span className="relative cursor-help">
           <span className="inline-flex items-center justify-center w-3.5 h-3.5 text-[10px] leading-none rounded-full border border-[var(--color-text-tertiary)] text-[var(--color-text-tertiary)] opacity-60 group-hover:opacity-100 transition-opacity">?</span>
-          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 text-[11px] leading-relaxed text-white bg-gray-800 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg max-w-[220px] whitespace-normal text-center">
+          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-3 py-2 text-xs leading-relaxed text-white bg-[var(--color-primary-darker)] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg max-w-[280px] whitespace-normal text-center">
             {tip}
           </span>
         </span>
