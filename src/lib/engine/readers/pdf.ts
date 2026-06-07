@@ -472,7 +472,7 @@ async function pdfToExcelGrid(pdfjs: any, typedArray: Uint8Array, fileName: stri
   if (!fixed) {
     console.log(`[PDF] headers: 未找到表头行，保留原始headers (${result.headers.length}列)`);
   }
-  console.log(`[PDF] readExcelBuffer: ${result.rows.length}行, ${result.totalCols}列`);
+  console.log(`[PDF] readExcelBuffer: ${result.rows.length}行, ${result.rows[0]?.length || 0}列`);
 
   return result;
 }
