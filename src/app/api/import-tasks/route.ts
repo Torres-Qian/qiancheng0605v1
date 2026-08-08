@@ -3,7 +3,7 @@
 // 优化策略：
 //   1. 不预扫描行数（用文件大小估算，Worker 修正）
 //   2. 事务内只写 import_tasks 元数据，Outbox 异步写入
-//   3. fileData 同步写入（必须等，否则 Worker 取不到文件）
+//   3. fileData 用 base64 存入 text 字段（避免二进制写入 UTF-8 错误）
 import { NextRequest, NextResponse } from "next/server";
 import { createImportTask } from "@/lib/services/import-task.service";
 import { getDb } from "@/lib/db";
@@ -37,14 +37,13 @@ export async function POST(request: NextRequest) {
       totalRows: estimatedRows,
     });
 
-    // Step 2: 同步读取并写入文件数据
-    // Vercel 的 request.formData() 已把文件读入内存，arrayBuffer() 是零拷贝返回引用
+    // Step 2: 同步读取并 base64 编码文件数据
     const arrayBuffer = await file.arrayBuffer();
-    const fileData = Buffer.from(arrayBuffer);
+    const fileData = Buffer.from(arrayBuffer).toString("base64");
 
-    // 直接 UPDATE（不复用 createImportTask 中的事务）
+    // 直接 UPDATE 写入 base64 字符串
     const db = getDb();
-    await db.update(importTasks).set({ fileData } as any).where(eq(importTasks.id, result.taskId));
+    await db.update(importTasks).set({ fileData }).where(eq(importTasks.id, result.taskId));
 
     return NextResponse.json({
       success: true,

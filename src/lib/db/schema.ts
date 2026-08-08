@@ -80,6 +80,7 @@ export const importTasks = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     fileName: varchar('file_name', { length: 500 }).notNull(),
     filePath: text('file_path'),
+    // fileData 用 text 存 base64 编码字符串（避免 binary 触发 UTF-8 错误）
     fileData: text('file_data'),
     parseRuleId: uuid('parse_rule_id').references(() => parseRules.id),
     status: varchar('status', { length: 20 }).notNull().default('PENDING'),
