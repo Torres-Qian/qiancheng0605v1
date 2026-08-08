@@ -57,7 +57,15 @@ export async function processBatch(params: BatchProcessParams): Promise<BatchPro
       if (!taskRecord[0]?.fileData) {
         throw new Error(`任务文件数据不存在: ${taskId}`);
       }
-      fileBuffer = Buffer.from(taskRecord[0].fileData, "base64");
+      // fileData 可能是 Buffer 或 base64 string（向后兼容）
+      const raw = taskRecord[0].fileData;
+      if (Buffer.isBuffer(raw)) {
+        fileBuffer = raw;
+      } else if (typeof raw === 'string') {
+        fileBuffer = Buffer.from(raw, "base64");
+      } else {
+        fileBuffer = Buffer.from(String(raw), "base64");
+      }
       fileName = taskRecord[0].fileName;
     } else {
       // 从磁盘读取（本地开发）

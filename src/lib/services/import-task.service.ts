@@ -14,7 +14,7 @@ const BATCH_SIZE = 1000;
 export interface CreateTaskParams {
   fileName: string;
   filePath: string;
-  fileData?: string;
+  fileData?: string | Buffer;
   parseRuleId: string;
   totalRows: number;
 }
