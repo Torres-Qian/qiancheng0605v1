@@ -1,0 +1,13 @@
+services:
+  - type: worker
+    name: import-worker
+    env: node
+    buildCommand: npm install
+    startCommand: npx tsx src/lib/queue/worker.ts
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: BLOB_READ_WRITE_TOKEN
+        sync: false
