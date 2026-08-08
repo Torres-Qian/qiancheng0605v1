@@ -49,9 +49,14 @@ export async function processBatch(params: BatchProcessParams): Promise<BatchPro
 
   try {
     if (filePath.startsWith("https://")) {
-      // Blob 模式：从 Vercel Blob URL 下载文件
+      // Blob 模式：从 Vercel Blob URL 下载文件（private store 需要 token）
       fileName = filePath.split("/").pop()?.split("?")[0] || "unknown";
-      const response = await fetch(filePath);
+      const token = process.env.BLOB_READ_WRITE_TOKEN;
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const response = await fetch(filePath, { headers });
       if (!response.ok) {
         throw new Error(`Blob 文件下载失败: HTTP ${response.status} ${response.statusText}`);
       }
