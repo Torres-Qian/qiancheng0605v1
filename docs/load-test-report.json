@@ -1,0 +1,196 @@
+{
+  "test_time": "2026-08-08T10:35:05.088Z",
+  "base_url": "https://qiancheng0605v1.vercel.app",
+  "worker_count": 2,
+  "worker_concurrency": 4,
+  "db_type": "Neon PostgreSQL Serverless",
+  "sku_count": 20000,
+  "notes": [],
+  "upload_p95_test": {
+    "file": "demo_1000.xlsx",
+    "rows": 1000,
+    "file_size_mb": "0.45",
+    "times_ms": [
+      1691,
+      1306,
+      986,
+      1366,
+      1243
+    ],
+    "p50_ms": 1306,
+    "p95_ms": 1691,
+    "avg_ms": 1318,
+    "p95_pass": false
+  },
+  "e2e_test": {
+    "file": "demo_1000.xlsx",
+    "taskId": "f3858508-ae48-43f9-8b22-15142586ba4a",
+    "upload_ms": 1402,
+    "total_ms": 9362,
+    "total_seconds": "9.4",
+    "status": "PARTIAL_SUCCESS",
+    "totalRows": 941,
+    "successRows": 877,
+    "failedRows": 80,
+    "processedRows": 941,
+    "degraded": false,
+    "target_60s_pass": true
+  },
+  "big_file_test": {
+    "file": "10000-orders.xlsx",
+    "rows": 10000,
+    "file_size_mb": "4.43",
+    "multipart_size_mb": "4.43",
+    "http_status": 413,
+    "duration_ms": 1203,
+    "note": "Vercel payload 限制 4.5MB，10000行文件含 multipart 开销后超限"
+  },
+  "monitor_snapshot": {
+    "queueDepth": {
+      "pendingBatches": "0",
+      "pendingRows": 0,
+      "status": "normal",
+      "threshold": 5000
+    },
+    "stageLatency": {
+      "parse": {
+        "p50": 1188,
+        "p95": 2332,
+        "p99": 3608
+      },
+      "validate": {
+        "p50": 484,
+        "p95": 1054,
+        "p99": 2707
+      },
+      "insert": {
+        "p50": 1152,
+        "p95": 2907,
+        "p99": 4140
+      }
+    },
+    "errorDistribution": [
+      {
+        "errorCode": "E001",
+        "errorName": "SKU 不存在",
+        "count": "7417",
+        "percentage": 0
+      },
+      {
+        "errorCode": "E003",
+        "errorName": "电话格式错误",
+        "count": "1188",
+        "percentage": 0
+      },
+      {
+        "errorCode": "E002",
+        "errorName": "必填字段缺失",
+        "count": "14",
+        "percentage": 0
+      }
+    ],
+    "slowBatches": [
+      {
+        "taskId": "38e38897-0767-46de-9c55-1255633125dd",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 9556,
+        "parseDurationMs": 3136,
+        "validateDurationMs": 77,
+        "insertDurationMs": 3346,
+        "rowCount": 941
+      },
+      {
+        "taskId": "b4597c0f-6fc9-4a4e-b253-9778b7e4eea5",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 8545,
+        "parseDurationMs": 220,
+        "validateDurationMs": 2319,
+        "insertDurationMs": 4790,
+        "rowCount": 941
+      },
+      {
+        "taskId": "d183b80e-c396-4e6c-9ef0-26963b17fab7",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 8301,
+        "parseDurationMs": 1204,
+        "validateDurationMs": 813,
+        "insertDurationMs": 1395,
+        "rowCount": 1000
+      },
+      {
+        "taskId": "74b32b53-b37e-4946-b707-ecf399367ebe",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 8146,
+        "parseDurationMs": 315,
+        "validateDurationMs": 3025,
+        "insertDurationMs": 3252,
+        "rowCount": 941
+      },
+      {
+        "taskId": "b8e4c4d8-ecc2-487b-a7eb-972070c22ff1",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 7790,
+        "parseDurationMs": 3995,
+        "validateDurationMs": 805,
+        "insertDurationMs": 1057,
+        "rowCount": 1000
+      },
+      {
+        "taskId": "6635a530-d62a-47f4-8bc1-0221fe681a7a",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 6520,
+        "parseDurationMs": 1130,
+        "validateDurationMs": 1135,
+        "insertDurationMs": 1730,
+        "rowCount": 1000
+      },
+      {
+        "taskId": "d1171334-1b64-4e16-ab3d-4002ad80fc0b",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 5926,
+        "parseDurationMs": 1700,
+        "validateDurationMs": 660,
+        "insertDurationMs": 1158,
+        "rowCount": 941
+      },
+      {
+        "taskId": "539d1f15-214e-43bc-98de-ebbc98f5ace4",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 5680,
+        "parseDurationMs": 1268,
+        "validateDurationMs": 485,
+        "insertDurationMs": 1873,
+        "rowCount": 1000
+      },
+      {
+        "taskId": "302cb77f-d31d-428c-a808-56c3e33400f8",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 5678,
+        "parseDurationMs": 1780,
+        "validateDurationMs": 458,
+        "insertDurationMs": 1205,
+        "rowCount": 1000
+      },
+      {
+        "taskId": "478cfc72-9d44-47b0-90ea-728298dcb66b",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 5606,
+        "parseDurationMs": 1449,
+        "validateDurationMs": 603,
+        "insertDurationMs": 1232,
+        "rowCount": 1000
+      }
+    ]
+  },
+  "errors": []
+}

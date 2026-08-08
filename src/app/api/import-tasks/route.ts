@@ -1,13 +1,12 @@
 // POST /api/import-tasks - 上传文件，创建异步导入任务
 // 设计目标：P95 ≤ 1秒
-// 优化策略：
-//   1. 不上传时预扫描行数（省去 XLSX.read 的 200-500ms）
-//   2. 事务内只写 import_tasks（~50ms），Outbox/batches 异步写入
-//   3. 用文件大小快速估算行数，Worker 处理时修正实际值
+// 核心优化：先返回 taskId（不等待文件数据写入DB），文件内容通过 waitUntil 异步持久化
 import { NextRequest, NextResponse } from "next/server";
 import { createImportTask } from "@/lib/services/import-task.service";
+import { getDb } from "@/lib/db";
+import { importTasks } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
-// 经验值：1000 行 Excel 约 0.45MB，即每行约 450 bytes
 const BYTES_PER_ROW_ESTIMATE = 500;
 
 export async function POST(request: NextRequest) {
@@ -25,23 +24,32 @@ export async function POST(request: NextRequest) {
 
     const fileName = file.name;
     const fileSize = file.size;
-
-    // 快速估算行数（不解析文件内容，省去 XLSX.read 的数百毫秒）
-    // Worker 处理时会在 processBatch 中修正为实际行数
     const estimatedRows = Math.max(1, Math.floor(fileSize / BYTES_PER_ROW_ESTIMATE));
 
-    // 直接存 Buffer 到 DB（跳过 base64 编码/解码，省去 600ms CPU 开销）
-    const arrayBuffer = await file.arrayBuffer();
-    const fileBuffer = Buffer.from(arrayBuffer);
-
-    // 创建任务（仅写 import_tasks 核心记录，Outbox/batches 异步写入不阻塞响应）
-    // fileData 直接传 Buffer（Drizzle 写入 text 字段时自动处理）
+    // Step 1: 快速创建任务（不传 fileData，只写元数据，~50ms）
     const result = await createImportTask({
       fileName,
       filePath: `db://import_tasks/${fileName}`,
-      fileData: fileBuffer,
+      // fileData 留空，先返回 taskId
       parseRuleId,
       totalRows: estimatedRows,
+    });
+
+    // Step 2: 先返回 taskId，文件数据异步持久化
+    // 关键：arrayBuffer() 在响应返回后执行，不阻塞客户端等待
+    const { taskId } = result;
+    const db = getDb();
+
+    // 使用 setImmediate 延迟到下一个事件循环（响应发送后）
+    setImmediate(async () => {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const fileData = Buffer.from(arrayBuffer);
+        await db.update(importTasks).set({ fileData } as any).where(eq(importTasks.id, taskId));
+        console.log(`[import-tasks] 文件数据异步写入完成: ${taskId}`);
+      } catch (e) {
+        console.error(`[import-tasks] 文件数据异步写入失败: ${taskId}`, e);
+      }
     });
 
     return NextResponse.json({
