@@ -111,14 +111,36 @@ export default function ImportPage() {
     }
   };
 
-  // 客户端直传 Vercel Blob Storage（边缘网络，不经过 Vercel Serverless）
-  // upload() 直接从浏览器 PUT 到 Blob Storage，API 只返回 taskId（< 50ms）
+  // 客户端直传 Vercel Blob Storage（绕过 Vercel Serverless）
+  // 流程：先获取 token → 直接 PUT 到 blob.vercel-storage.com
   const uploadToBlob = async (file: File): Promise<string> => {
-    const blob = await upload(file.name, file, {
-      access: 'private',
-      handleUploadUrl: '/api/blob/token',
+    // Step 1: 获取 token（< 100ms）
+    const tokenRes = await fetch("/api/blob/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileName: file.name }),
     });
-    return blob.url;
+    const tokenData = await tokenRes.json();
+    if (!tokenData.success || !tokenData.data?.token) {
+      throw new Error("获取上传授权失败");
+    }
+    const { token, pathname } = tokenData.data;
+
+    // Step 2: 直接 PUT 到 vercel-storage.com（边缘网络直传，不经过 Vercel 函数）
+    const uploadRes = await fetch(`https://blob.vercel-storage.com/${pathname}?token=${encodeURIComponent(token)}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        "x-vercel-filename": file.name,
+      },
+      body: file,
+    });
+    if (!uploadRes.ok) {
+      const errText = await uploadRes.text();
+      throw new Error(`直传失败: HTTP ${uploadRes.status} ${errText.substring(0, 100)}`);
+    }
+    const blobResult = await uploadRes.json();
+    return blobResult.url;
   };
 
   // 异步导入模式：客户端直传 Blob + JSON 创建任务（不分片，整个文件一次上传）
