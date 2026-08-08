@@ -15,8 +15,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ success: false, error: "请上传文件" }, { status: 400 });
     }
 
-    // 直传到 Vercel Blob Storage（private store 不需要 access 参数）
+    // 直传到 Vercel Blob Storage
+    // @vercel/blob v0.27+ 的 put() 必须显式指定 access
     const blob = await put(file.name, file, {
+      access: "public",
       addRandomSuffix: true, // 避免文件名冲突
     });
 
