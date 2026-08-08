@@ -13,6 +13,7 @@ import { ParseRule, RuleConfig } from '@/types/rule';
 import { detectFileType } from '@/lib/utils/file';
 import { cn } from '@/lib/utils/cn';
 import { ArrowLeft, Plus, ChevronRight, FileText, Settings, Sparkles, Play, Check } from 'lucide-react';
+import { upload } from '@vercel/blob/client';
 import Link from 'next/link';
 
 export default function ImportPage() {
@@ -110,16 +111,14 @@ export default function ImportPage() {
     }
   };
 
-  // 上传单个分片到 /api/blob/upload（轻量代理，< 500ms）
-  const uploadChunkDirect = async (file: File): Promise<string> => {
-    const fd = new FormData();
-    fd.append("file", file);
-    const res = await fetch("/api/blob/upload", { method: "POST", body: fd });
-    const data = await res.json();
-    if (!data.success || !data.data?.url) {
-      throw new Error(data.error || "上传失败");
-    }
-    return data.data.url;
+  // 客户端直传 Vercel Blob Storage（边缘网络，不经过 Vercel Serverless）
+  // upload() 直接从浏览器 PUT 到 Blob Storage，API 只返回 taskId（< 50ms）
+  const uploadToBlob = async (file: File): Promise<string> => {
+    const blob = await upload(file.name, file, {
+      access: 'private',
+      handleUploadUrl: '/api/blob/token',
+    });
+    return blob.url;
   };
 
   // 异步导入模式：客户端直传 Blob + JSON 创建任务
@@ -171,7 +170,7 @@ export default function ImportPage() {
 
           await Promise.all(chunks.map(async (chunk, idx) => {
             // 客户端直传 Blob（不走 Serverless）
-            const blobUrl = await uploadChunkDirect(chunk);
+            const blobUrl = await uploadToBlob(chunk);
 
             // 创建任务（JSON, ~50ms）
             const taskRes = await fetch("/api/import-tasks", {
@@ -198,7 +197,7 @@ export default function ImportPage() {
           }));
         } else {
           // 小文件直传
-          const blobUrl = await uploadChunkDirect(file);
+          const blobUrl = await uploadToBlob(file);
 
           const taskRes = await fetch("/api/import-tasks", {
             method: "POST",
