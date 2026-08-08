@@ -66,15 +66,11 @@ export async function POST(request: NextRequest) {
     const ext = fileName.split(".").pop()?.toLowerCase();
     const arrayBuffer = await file.arrayBuffer();
 
-    // 并行：预扫描行数（仅 xlsx）+ 查询规则配置
-    const [rawRowCount, ruleCfg] = await Promise.all([
+    // 并行：预扫描行数 + 规则查询 + Blob 上传
+    const [rawRowCount, ruleCfg, blobResult] = await Promise.all([
       (async () => {
         if (ext !== "xlsx" && ext !== "xls") return 0;
-        try {
-          return countExcelRowsQuick(arrayBuffer);
-        } catch {
-          return 0;
-        }
+        try { return countExcelRowsQuick(arrayBuffer); } catch { return 0; }
       })(),
       (async () => {
         try {
@@ -85,9 +81,20 @@ export async function POST(request: NextRequest) {
             .where(eq(parseRules.id, parseRuleId))
             .limit(1);
           return (rules[0]?.ruleConfig as any) || null;
-        } catch {
-          return null;
-        }
+        } catch { return null; }
+      })(),
+      // 异步上传到 Vercel Blob Storage（并行，不阻塞主流程）
+      (async () => {
+        try {
+          // 动态导入 @vercel/blob 避免冷启动加载
+          const { put } = await import("@vercel/blob");
+          const blob = await put(fileName, file, {
+            access: "private",
+            addRandomSuffix: true,
+            token: process.env.BLOB_READ_WRITE_TOKEN,
+          });
+          return { url: blob.url };
+        } catch { return null; }
       })(),
     ]);
 
@@ -101,18 +108,25 @@ export async function POST(request: NextRequest) {
     }
     if (totalRows <= 0) totalRows = 1;
 
+    // 文件存储策略：优先用 Blob URL（更快），否则 base64 存 DB
+    const filePath = blobResult?.url
+      ? blobResult.url  // Blob URL，Worker 直接下载
+      : `db://import_tasks/${fileName}`;  // 回退到 DB 存储
+
     // 创建任务
     const result = await createImportTask({
       fileName,
-      filePath: `db://import_tasks/${fileName}`,
+      filePath,
       parseRuleId,
       totalRows,
     });
 
-    // 同步写入 base64 文件数据
-    const fileData = Buffer.from(arrayBuffer).toString("base64");
-    const db = getDb();
-    await db.update(importTasks).set({ fileData }).where(eq(importTasks.id, result.taskId));
+    // 如果没有 Blob URL，存 base64 到 DB
+    if (!blobResult?.url) {
+      const fileData = Buffer.from(arrayBuffer).toString("base64");
+      const db = getDb();
+      await db.update(importTasks).set({ fileData }).where(eq(importTasks.id, result.taskId));
+    }
 
     return NextResponse.json({ success: true, data: result });
   } catch (err: any) {
