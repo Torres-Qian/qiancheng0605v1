@@ -126,32 +126,14 @@ export default function ImportPage() {
         }));
       }, 100);
 
-      // Step 1: 文件直传 Vercel Blob Storage
-      const blobFormData = new FormData();
-      blobFormData.append("file", store.file);
-
-      const blobRes = await fetch("/api/blob", {
-        method: "POST",
-        body: blobFormData,
-      });
-
-      const blobData = await blobRes.json();
-      if (!blobData.success || !blobData.data?.url) {
-        clearInterval(progressInterval);
-        showToast("error", "文件上传失败，请重试");
-        setParsing(false);
-        return;
-      }
-
-      // Step 2: 创建异步导入任务（JSON body，极速返回）
       const res = await fetch("/api/import-tasks", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          blobUrl: blobData.data.url,
-          fileName: store.file.name,
-          parseRuleId: selectedRuleId,
-        }),
+        body: (() => {
+          const fd = new FormData();
+          fd.append("file", store.file);
+          fd.append("parseRuleId", selectedRuleId);
+          return fd;
+        })(),
       });
 
       clearInterval(progressInterval);
