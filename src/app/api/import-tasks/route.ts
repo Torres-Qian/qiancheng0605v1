@@ -64,10 +64,10 @@ export async function POST(request: NextRequest) {
 
     const fileName = file.name;
     const ext = fileName.split(".").pop()?.toLowerCase();
-    const arrayBuffer = await file.arrayBuffer();
 
-    // 并行：预扫描行数 + 规则查询 + Blob 上传
-    const [rawRowCount, ruleCfg, blobResult] = await Promise.all([
+    // Step 1: 快速预扫描行数（仅 xlsx，50ms）+ 规则查询（并行）
+    const arrayBuffer = await file.arrayBuffer();
+    const [rawRowCount, ruleCfg] = await Promise.all([
       (async () => {
         if (ext !== "xlsx" && ext !== "xls") return 0;
         try { return countExcelRowsQuick(arrayBuffer); } catch { return 0; }
@@ -83,19 +83,6 @@ export async function POST(request: NextRequest) {
           return (rules[0]?.ruleConfig as any) || null;
         } catch { return null; }
       })(),
-      // 异步上传到 Vercel Blob Storage（并行，不阻塞主流程）
-      (async () => {
-        try {
-          // 动态导入 @vercel/blob 避免冷启动加载
-          const { put } = await import("@vercel/blob");
-          const blob = await put(fileName, file, {
-            access: "private",
-            addRandomSuffix: true,
-            token: process.env.BLOB_READ_WRITE_TOKEN,
-          });
-          return { url: blob.url };
-        } catch { return null; }
-      })(),
     ]);
 
     // 扣除表头行
@@ -108,25 +95,45 @@ export async function POST(request: NextRequest) {
     }
     if (totalRows <= 0) totalRows = 1;
 
-    // 文件存储策略：优先用 Blob URL（更快），否则 base64 存 DB
-    const filePath = blobResult?.url
-      ? blobResult.url  // Blob URL，Worker 直接下载
-      : `db://import_tasks/${fileName}`;  // 回退到 DB 存储
-
-    // 创建任务
+    // Step 2: 立即创建任务并返回（fileData 异步补写）
+    // 先用 db:// 协议创建任务，Worker 稍后从 DB 读取
     const result = await createImportTask({
       fileName,
-      filePath,
+      filePath: `db://import_tasks/${fileName}`,
       parseRuleId,
       totalRows,
     });
 
-    // 如果没有 Blob URL，存 base64 到 DB
-    if (!blobResult?.url) {
-      const fileData = Buffer.from(arrayBuffer).toString("base64");
-      const db = getDb();
-      await db.update(importTasks).set({ fileData }).where(eq(importTasks.id, result.taskId));
-    }
+    // Step 3: 异步写入文件数据 + Blob 上传（不阻塞响应）
+    const { taskId } = result;
+    const db = getDb();
+
+    // 用 queueMicrotask 确保在响应发送后执行
+    queueMicrotask(async () => {
+      try {
+        // 优先尝试 Blob 上传（无需 base64 编码）
+        try {
+          const { put } = await import("@vercel/blob");
+          const blob = await put(fileName, file, {
+            access: "private",
+            addRandomSuffix: true,
+            token: process.env.BLOB_READ_WRITE_TOKEN,
+          });
+          // 更新 filePath 为 Blob URL（Worker 从 Blob 下载）
+          await db.update(importTasks)
+            .set({ filePath: blob.url } as any)
+            .where(eq(importTasks.id, taskId));
+        } catch {
+          // Blob 上传失败，回退到 base64 存 DB
+          const fileData = Buffer.from(arrayBuffer).toString("base64");
+          await db.update(importTasks)
+            .set({ fileData } as any)
+            .where(eq(importTasks.id, taskId));
+        }
+      } catch (e) {
+        console.error(`[import-tasks] 异步存储文件失败: ${taskId}`, e);
+      }
+    });
 
     return NextResponse.json({ success: true, data: result });
   } catch (err: any) {
