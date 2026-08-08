@@ -308,7 +308,9 @@ export async function processBatch(params: BatchProcessParams): Promise<BatchPro
   let actualTotalRows = 0;
   if (fileBuffer) {
     try {
-      const ab = fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength);
+      // Buffer 转 ArrayBuffer（copy 语义，避免 SharedArrayBuffer 类型问题）
+      const ab = new ArrayBuffer(fileBuffer.byteLength);
+      new Uint8Array(ab).set(fileBuffer);
       const rawData = await readFileFromBuffer(ab, fileName);
       actualTotalRows = rawData.rows.length - (ruleConfig.headerRow || 1) - (ruleConfig.skipRows?.bottom || 0);
     } catch {
