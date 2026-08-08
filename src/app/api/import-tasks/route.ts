@@ -34,12 +34,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: "请选择解析规则" }, { status: 400 });
       }
 
-      // Blob 模式下不预扫描行数（文件不在本地），totalRows 由 Worker 修正
+      // Blob 模式下不预扫描行数（文件不在本地）
+      // 用 BATCH_SIZE 作为 totalRows，让 Worker 单批处理整个文件并修正实际行数
+      const BATCH_SIZE = 1000;
       const result = await createImportTask({
         fileName,
         filePath: blobUrl, // 直接存 Blob URL 作为文件路径
         parseRuleId,
-        totalRows: 1, // 占位，Worker 处理时修正
+        totalRows: BATCH_SIZE, // 假设单批文件不超过 1000 行
       });
 
       return NextResponse.json({ success: true, data: result });
