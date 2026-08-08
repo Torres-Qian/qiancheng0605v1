@@ -111,132 +111,130 @@ export default function ImportPage() {
   };
 
   // 异步导入模式：Blob 直传 + JSON 创建任务（P50 < 100ms）
-  // 大文件（> 4MB）自动切分为 5000 行/片，每片独立上传
+  // 大文件自动切分为 1000 行/片，并行上传，第一个 taskId 返回后立即跳转
   const handleAsyncImport = async () => {
     if (!store.file || !selectedRuleId) return;
 
     setParsing(true);
     setParseProgress({ current: 0, total: 100, percent: 0 });
 
-    try {
-      const progressInterval = setInterval(() => {
-        setParseProgress(prev => ({
-          current: Math.min(prev.current + 5, 85),
-          total: 100,
-          percent: Math.min(prev.percent + 5, 85),
-        }));
-      }, 100);
+    const file = store.file;
+    const CHUNK_ROWS = 1000;
+    const MAX_CHUNK_SIZE = 0.5 * 1024 * 1024; // 每片最大 0.5MB（确保 Vercel 不卡）
+    const needSplit = file.size > MAX_CHUNK_SIZE && file.name.match(/\.xlsx?$/i);
 
-      const file = store.file;
-      const CHUNK_ROWS = 5000;
-      const CHUNK_SIZE_MB = 4; // Vercel 4.5MB 限制，留 0.5MB 给 multipart 开销
-      const needSplit = file.size > CHUNK_SIZE_MB * 1024 * 1024;
+    (async () => {
+      try {
+        let taskIds: string[] = [];
+        let totalRows = 0;
+        let firstTaskId: string | null = null;
 
-      let taskIds: string[] = [];
-      let totalRows = 0;
+        if (needSplit) {
+          const XLSX = await import("xlsx");
+          const arrayBuffer = await file.arrayBuffer();
+          const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: "array" });
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const allData = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+          const headerRow = allData[0];
+          const dataRows = allData.slice(1);
+          totalRows = dataRows.length;
 
-      if (needSplit && file.name.match(/\.xlsx?$/i)) {
-        // 大文件切分：读取 Excel，按 5000 行切分为多个小文件
-        const XLSX = await import("xlsx");
-        const arrayBuffer = await file.arrayBuffer();
-        const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: "array" });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const allData = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
-        const headerRow = allData[0];
-        const dataRows = allData.slice(1);
-        const chunks: any[][][] = [];
+          // 切分
+          const chunks: { file: File; rows: number }[] = [];
+          for (let i = 0; i < dataRows.length; i += CHUNK_ROWS) {
+            const chunkRows = dataRows.slice(i, i + CHUNK_ROWS);
+            const chunkData = [headerRow, ...chunkRows];
+            const chunkSheet = XLSX.utils.aoa_to_sheet(chunkData);
+            const chunkWorkbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(chunkWorkbook, chunkSheet, sheetName);
+            const chunkBuffer = XLSX.write(chunkWorkbook, { bookType: "xlsx", type: "array" });
+            chunks.push({
+              file: new File(
+                [new Uint8Array(chunkBuffer)],
+                `${file.name.replace(/\.xlsx?$/i, "")}_part${i / CHUNK_ROWS + 1}.xlsx`,
+                { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
+              ),
+              rows: chunkRows.length,
+            });
+          }
 
-        for (let i = 0; i < dataRows.length; i += CHUNK_ROWS) {
-          chunks.push([headerRow, ...dataRows.slice(i, i + CHUNK_ROWS)]);
-        }
+          setParseProgress({ current: 10, total: 100, percent: 10 });
+          let completedChunks = 0;
 
-        totalRows = dataRows.length;
-        setParseProgress({ current: 10, total: 100, percent: 10 });
+          // 并行上传所有分片
+          await Promise.all(chunks.map(async (chunk, idx) => {
+            const blobFd = new FormData();
+            blobFd.append("file", chunk.file);
+            const blobRes = await fetch("/api/blob", { method: "POST", body: blobFd });
+            const blobData = await blobRes.json();
+            if (!blobData.success || !blobData.data?.url) {
+              throw new Error(`分片 ${idx + 1} 上传失败`);
+            }
 
-        for (let idx = 0; idx < chunks.length; idx++) {
-          const chunkData = chunks[idx];
-          const chunkWorkbook = XLSX.utils.book_new();
-          const chunkSheet = XLSX.utils.aoa_to_sheet(chunkData);
-          XLSX.utils.book_append_sheet(chunkWorkbook, chunkSheet, sheetName);
-          const chunkBuffer = XLSX.write(chunkWorkbook, { bookType: "xlsx", type: "array" });
-          const chunkFile = new File(
-            [new Uint8Array(chunkBuffer)],
-            `${file.name.replace(/\.xlsx?$/i, "")}_part${idx + 1}_of_${chunks.length}.xlsx`,
-            { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
-          );
+            const taskRes = await fetch("/api/import-tasks", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                blobUrl: blobData.data.url,
+                fileName: chunk.file.name,
+                parseRuleId: selectedRuleId,
+              }),
+            });
+            const taskData = await taskRes.json();
+            if (taskData.success && taskData.data?.taskId) {
+              taskIds.push(taskData.data.taskId);
+              if (!firstTaskId) firstTaskId = taskData.data.taskId;
+            }
 
-          // Blob 直传
+            completedChunks++;
+            setParseProgress({
+              current: Math.min(20 + completedChunks * 40, 90),
+              total: 100,
+              percent: Math.min(20 + completedChunks * 40, 90),
+            });
+          }));
+        } else {
+          // 小文件直接上传
           const blobFd = new FormData();
-          blobFd.append("file", chunkFile);
+          blobFd.append("file", file);
           const blobRes = await fetch("/api/blob", { method: "POST", body: blobFd });
           const blobData = await blobRes.json();
           if (!blobData.success || !blobData.data?.url) {
-            throw new Error(`分片 ${idx + 1} 上传失败`);
+            throw new Error("文件上传失败");
           }
 
-          // 创建任务
           const taskRes = await fetch("/api/import-tasks", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               blobUrl: blobData.data.url,
-              fileName: chunkFile.name,
+              fileName: file.name,
               parseRuleId: selectedRuleId,
             }),
           });
           const taskData = await taskRes.json();
           if (taskData.success && taskData.data?.taskId) {
             taskIds.push(taskData.data.taskId);
+            firstTaskId = taskData.data.taskId;
+          } else {
+            throw new Error(taskData.error || "创建任务失败");
           }
-
-          setParseProgress({
-            current: Math.min(30 + idx * 30, 90),
-            total: 100,
-            percent: Math.min(30 + idx * 30, 90),
-          });
-        }
-      } else {
-        // 小文件直接 Blob 上传
-        const blobFd = new FormData();
-        blobFd.append("file", file);
-        const blobRes = await fetch("/api/blob", { method: "POST", body: blobFd });
-        const blobData = await blobRes.json();
-        if (!blobData.success || !blobData.data?.url) {
-          throw new Error("文件上传失败");
         }
 
-        const taskRes = await fetch("/api/import-tasks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            blobUrl: blobData.data.url,
-            fileName: file.name,
-            parseRuleId: selectedRuleId,
-          }),
-        });
-        const taskData = await taskRes.json();
-        if (taskData.success && taskData.data?.taskId) {
-          taskIds.push(taskData.data.taskId);
+        setParseProgress({ current: 100, total: 100, percent: 100 });
+
+        if (firstTaskId) {
+          showToast("success", `已创建 ${taskIds.length} 个任务，共 ${totalRows || "?"} 行`);
+          setTimeout(() => router.push(`/import/${firstTaskId}`), 200);
         } else {
-          throw new Error(taskData.error || "创建任务失败");
+          throw new Error("未能创建任务");
         }
+      } catch (err: any) {
+        showToast("error", err.message || "请求失败");
+        setParsing(false);
       }
-
-      clearInterval(progressInterval);
-      setParseProgress({ current: 100, total: 100, percent: 100 });
-
-      if (taskIds.length === 1) {
-        showToast("success", `任务已创建`);
-        setTimeout(() => router.push(`/import/${taskIds[0]}`), 300);
-      } else {
-        showToast("success", `已创建 ${taskIds.length} 个任务，共 ${totalRows} 行`);
-        setTimeout(() => router.push(`/import/${taskIds[0]}`), 300);
-      }
-    } catch (err: any) {
-      showToast("error", err.message || "请求失败");
-      setParsing(false);
-    }
+    })();
   };
 
   // 点击开始导入
