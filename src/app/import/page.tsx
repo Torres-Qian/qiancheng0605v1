@@ -168,33 +168,46 @@ export default function ImportPage() {
           setParseProgress({ current: 10, total: 100, percent: 10 });
           let completedChunks = 0;
 
-          await Promise.all(chunks.map(async (chunk, idx) => {
-            // 客户端直传 Blob（不走 Serverless）
-            const blobUrl = await uploadToBlob(chunk);
-
-            // 创建任务（JSON, ~50ms）
-            const taskRes = await fetch("/api/import-tasks", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                blobUrl,
-                fileName: chunk.name,
-                parseRuleId: selectedRuleId,
-              }),
-            });
-            const taskData = await taskRes.json();
-            if (taskData.success && taskData.data?.taskId) {
-              taskIds.push(taskData.data.taskId);
-              if (!firstTaskId) firstTaskId = taskData.data.taskId;
-            }
-
-            completedChunks++;
-            setParseProgress({
-              current: Math.min(20 + completedChunks * 40, 90),
-              total: 100,
-              percent: Math.min(20 + completedChunks * 40, 90),
-            });
-          }));
+          // 第一个 chunk 完成立即跳转；其余后台继续
+          chunks.forEach((chunk, idx) => {
+            (async () => {
+              const blobUrl = await uploadToBlob(chunk);
+              const taskRes = await fetch("/api/import-tasks", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  blobUrl,
+                  fileName: chunk.name,
+                  parseRuleId: selectedRuleId,
+                }),
+              });
+              const taskData = await taskRes.json();
+              if (taskData.success && taskData.data?.taskId) {
+                taskIds.push(taskData.data.taskId);
+                if (!firstTaskId) {
+                  firstTaskId = taskData.data.taskId;
+                  // 第一个任务创建成功，立即跳转
+                  showToast("success", "已开始处理，可在任务页查看进度");
+                  router.push(`/import/${firstTaskId}`);
+                }
+              }
+              completedChunks++;
+              setParseProgress({
+                current: Math.min(20 + completedChunks * 40, 90),
+                total: 100,
+                percent: Math.min(20 + completedChunks * 40, 90),
+              });
+            })();
+          });
+          // 等待所有 chunk 完成（不阻塞跳转）
+          await new Promise<void>((resolve) => {
+            const interval = setInterval(() => {
+              if (completedChunks >= chunks.length) {
+                clearInterval(interval);
+                resolve();
+              }
+            }, 200);
+          });
         } else {
           // 小文件直传
           const blobUrl = await uploadToBlob(file);
@@ -218,13 +231,6 @@ export default function ImportPage() {
         }
 
         setParseProgress({ current: 100, total: 100, percent: 100 });
-
-        if (firstTaskId) {
-          showToast("success", `已创建 ${taskIds.length} 个任务，共 ${totalRows || "?"} 行`);
-          setTimeout(() => router.push(`/import/${firstTaskId}`), 200);
-        } else {
-          throw new Error("未能创建任务");
-        }
       } catch (err: any) {
         showToast("error", err.message || "请求失败");
         setParsing(false);
