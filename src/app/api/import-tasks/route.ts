@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createImportTask } from "@/lib/services/import-task.service";
 import { countExcelRowsQuick } from "@/lib/engine/readers/excel";
 import { getDb } from "@/lib/db";
-import { importTasks, parseRules } from "@/lib/db/schema";
+import { importTasks, parseRules, eventOutbox, importTaskBatches } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function POST(request: NextRequest) {
@@ -107,9 +107,9 @@ export async function POST(request: NextRequest) {
           })(),
         ]);
 
-        // 修正 totalRows
-        if (rawRowCount > 0) {
-          let totalRows = rawRowCount;
+        // 修正 totalRows + 标记为 PROCESSING（让 Dispatcher 知道可以处理了）
+        let totalRows = rawRowCount;
+        if (totalRows > 0) {
           const ruleCfg = await (async () => {
             try {
               const rules = await db
@@ -126,12 +126,63 @@ export async function POST(request: NextRequest) {
             const dataRows = totalRows - headerRow - skipBottom;
             if (dataRows > 0) totalRows = dataRows;
           }
-          if (totalRows > 0) {
-            await db.update(importTasks)
-              .set({ totalRows } as any)
-              .where(eq(importTasks.id, taskId));
-          }
         }
+        if (totalRows <= 0) totalRows = 1;
+
+        // 修正 totalRows + 计算批次数 + 写 Outbox 事件
+        const totalBatches = Math.ceil(totalRows / 1000);
+        await db.transaction(async (tx) => {
+          await tx.update(importTasks)
+            .set({ totalRows, totalBatches } as any)
+            .where(eq(importTasks.id, taskId));
+
+          // 写 Outbox 事件（Dispatcher 会扫描到）
+          const outboxEvents = [];
+          for (let i = 0; i < totalBatches; i++) {
+            outboxEvents.push({
+              aggregateId: taskId,
+              eventType: "ImportBatchCreated",
+              payload: {
+                event_id: `evt_${taskId}_${i}`,
+                event_type: "ImportBatchCreated",
+                schema_version: 1,
+                aggregate_id: taskId,
+                trace_id: result.traceId,
+                occurred_at: new Date().toISOString(),
+                payload: {
+                  taskId,
+                  unitId: `unit_${String(i).padStart(4, '0')}`,
+                  batchIndex: i,
+                  startRow: i * 1000,
+                  endRow: Math.min((i + 1) * 1000 - 1, totalRows - 1),
+                  filePath: '', // Worker 会从 import_tasks 表读取最新 filePath
+                  parseRuleId,
+                  traceId: result.traceId,
+                },
+              },
+              status: "pending",
+            });
+          }
+          if (outboxEvents.length > 0) {
+            await tx.insert(eventOutbox).values(outboxEvents);
+          }
+
+          // 写 import_task_batches
+          const batchRows = [];
+          for (let i = 0; i < totalBatches; i++) {
+            batchRows.push({
+              taskId,
+              unitId: `unit_${String(i).padStart(4, '0')}`,
+              batchIndex: i,
+              startRow: i * 1000,
+              endRow: Math.min((i + 1) * 1000 - 1, totalRows - 1),
+              status: "PENDING",
+            });
+          }
+          if (batchRows.length > 0) {
+            await tx.insert(importTaskBatches).values(batchRows);
+          }
+        });
       } catch (e) {
         console.error(`[import-tasks] 异步处理失败: ${taskId}`, e);
       }
