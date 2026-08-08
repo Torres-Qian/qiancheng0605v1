@@ -28,6 +28,10 @@ export async function processBatch(params: BatchProcessParams): Promise<BatchPro
   const { taskId, unitId, batchIndex, startRow, endRow, filePath, parseRuleId, traceId } = params;
   const db = getDb();
 
+  // 提前声明，使 try/catch 外部可访问
+  let fileBuffer: Buffer | null = null;
+  let fileName = "";
+
   // 获取解析规则
   const rules = await db.query.parseRules.findFirst({
     where: (r, { eq }) => eq(r.id, parseRuleId),
@@ -44,9 +48,6 @@ export async function processBatch(params: BatchProcessParams): Promise<BatchPro
   let records: WaybillRecord[] = [];
 
   try {
-    let fileBuffer: Buffer;
-    let fileName: string;
-
     if (filePath.startsWith("db://")) {
       // 从数据库读取（Vercel Serverless 兼容）
       const taskRecord = await db
@@ -305,12 +306,15 @@ export async function processBatch(params: BatchProcessParams): Promise<BatchPro
 
   // 从 rawData 获取实际总行数（用于修正上传时的估算值）
   let actualTotalRows = 0;
-  try {
-    // Buffer 转 ArrayBuffer：fileBuffer.buffer 是共享的 ArrayBuffer
-    const ab = fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength);
-    const rawData = await readFileFromBuffer(ab, fileName);
-    actualTotalRows = rawData.rows.length - (ruleConfig.headerRow || 1) - (ruleConfig.skipRows?.bottom || 0);
-  } catch {
+  if (fileBuffer) {
+    try {
+      const ab = fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength);
+      const rawData = await readFileFromBuffer(ab, fileName);
+      actualTotalRows = rawData.rows.length - (ruleConfig.headerRow || 1) - (ruleConfig.skipRows?.bottom || 0);
+    } catch {
+      actualTotalRows = successRecords.length + errors.length;
+    }
+  } else {
     actualTotalRows = successRecords.length + errors.length;
   }
 

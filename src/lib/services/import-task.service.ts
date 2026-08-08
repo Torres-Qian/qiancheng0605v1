@@ -33,13 +33,13 @@ export async function createImportTask(params: CreateTaskParams): Promise<Import
     id: taskId,
     fileName,
     filePath,
-    fileData: fileData || null,
+    fileData: (fileData as any) || null,
     parseRuleId,
     status: "PENDING",
     totalRows,
     totalBatches,
     traceId,
-  });
+  } as any);
 
   // 异步写入 Outbox + batches + trace_events（不阻塞 HTTP 响应）
   // 使用 setImmediate 确保在当前 tick 后异步执行
