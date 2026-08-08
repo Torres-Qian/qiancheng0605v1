@@ -58,15 +58,19 @@ export async function processBatch(params: BatchProcessParams): Promise<BatchPro
         throw new Error(`任务文件数据不存在: ${taskId}`);
       }
       // fileData 可能是 Buffer / ArrayBuffer / Uint8Array / base64 string
-      const raw = taskRecord[0].fileData;
+      const raw = taskRecord[0].fileData as any;
       if (Buffer.isBuffer(raw)) {
         fileBuffer = raw;
-      } else if (raw instanceof ArrayBuffer || raw instanceof Uint8Array) {
-        fileBuffer = Buffer.from(raw as ArrayBuffer);
+      } else if (raw instanceof ArrayBuffer) {
+        fileBuffer = Buffer.from(raw);
+      } else if (raw instanceof Uint8Array) {
+        fileBuffer = Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength);
       } else if (typeof raw === 'string') {
         fileBuffer = Buffer.from(raw, "base64");
-      } else {
+      } else if (raw) {
         fileBuffer = Buffer.from(String(raw), "base64");
+      } else {
+        throw new Error(`文件数据格式无法识别: ${typeof raw}`);
       }
       fileName = taskRecord[0].fileName;
     } else {
@@ -302,7 +306,9 @@ export async function processBatch(params: BatchProcessParams): Promise<BatchPro
   // 从 rawData 获取实际总行数（用于修正上传时的估算值）
   let actualTotalRows = 0;
   try {
-    const rawData = await readFileFromBuffer(fileBuffer.buffer as ArrayBuffer, fileName);
+    // Buffer 转 ArrayBuffer：fileBuffer.buffer 是共享的 ArrayBuffer
+    const ab = fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength);
+    const rawData = await readFileFromBuffer(ab, fileName);
     actualTotalRows = rawData.rows.length - (ruleConfig.headerRow || 1) - (ruleConfig.skipRows?.bottom || 0);
   } catch {
     actualTotalRows = successRecords.length + errors.length;
