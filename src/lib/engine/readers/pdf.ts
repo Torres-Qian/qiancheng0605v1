@@ -313,11 +313,6 @@ async function generateExcelViaOpenpyxl(rows: string[][]): Promise<ArrayBuffer |
   }
   console.log(`[PDF] openpyxl script: ${scriptPath}`);
 
-  if (!fs.existsSync(scriptPath)) {
-    console.warn('[PDF] excel_builder.py not found, falling back to XLSX');
-    return null;
-  }
-
   try {
     const { execFileSync } = await import('child_process');
     const jsonInput = JSON.stringify({ rows });
