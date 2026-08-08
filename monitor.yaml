@@ -1,116 +1,123 @@
-- generic [active] [ref=f1e1]:
-  - generic [ref=f1e2]:
-    - complementary [ref=f1e3]:
-      - link "万能导入" [ref=f1e5] [cursor=pointer]:
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - link "万能导入" [ref=e5] [cursor=pointer]:
         - /url: /
-      - navigation [ref=f1e11]:
-        - link "工作台" [ref=f1e12] [cursor=pointer]:
+      - navigation [ref=e11]:
+        - link "工作台" [ref=e12] [cursor=pointer]:
           - /url: /
-        - link "导入下单" [ref=f1e19] [cursor=pointer]:
+        - link "导入下单" [ref=e19] [cursor=pointer]:
           - /url: /import
-        - link "解析规则" [ref=f1e24] [cursor=pointer]:
+        - link "解析规则" [ref=e24] [cursor=pointer]:
           - /url: /rules
-        - link "运单列表" [ref=f1e29] [cursor=pointer]:
+        - link "运单列表" [ref=e29] [cursor=pointer]:
           - /url: /waybills
-        - link "监控看板" [ref=f1e34] [cursor=pointer]:
+        - link "监控看板" [ref=e34] [cursor=pointer]:
           - /url: /monitor
-        - link "链路追踪" [ref=f1e38] [cursor=pointer]:
+        - link "链路追踪" [ref=e38] [cursor=pointer]:
           - /url: /traces
-      - paragraph [ref=f1e44]: 万能导入 V4
-    - generic [ref=f1e45]:
-      - banner [ref=f1e46]:
-        - heading "万能导入" [level=1] [ref=f1e48]
-        - generic [ref=f1e49]:
-          - button [ref=f1e50]
-          - generic [ref=f1e55]: U
-      - main [ref=f1e56]:
-        - generic [ref=f1e59]:
-          - generic [ref=f1e60]:
-            - link "返回工作台" [ref=f1e62] [cursor=pointer]:
+      - paragraph [ref=e44]: 万能导入 V4
+    - generic [ref=e45]:
+      - banner [ref=e46]:
+        - heading "万能导入" [level=1] [ref=e48]
+        - generic [ref=e49]:
+          - button [ref=e50]
+          - generic [ref=e55]: U
+      - main [ref=e56]:
+        - generic [ref=e59]:
+          - generic [ref=e60]:
+            - link "返回工作台" [ref=e62] [cursor=pointer]:
               - /url: /
-            - button "刷新" [ref=f1e66]
-          - heading "导入监控看板" [level=1] [ref=f1e72]
-          - generic [ref=f1e80]:
-            - generic [ref=f1e87]:
-              - paragraph [ref=f1e88]: 实时吞吐量
-              - paragraph [ref=f1e89]: 暂无数据
-            - generic [ref=f1e97]:
-              - paragraph [ref=f1e98]: 队列积压
-              - paragraph [ref=f1e99]: 0 批
-            - generic [ref=f1e106]:
-              - paragraph [ref=f1e107]: 校验 P95
-              - paragraph [ref=f1e108]: 345ms
-            - generic [ref=f1e116]:
-              - paragraph [ref=f1e117]: 写入 P95
-              - paragraph [ref=f1e118]: 290ms
-          - generic [ref=f1e119]:
-            - heading "实时吞吐量" [level=3] [ref=f1e121]
-            - generic [ref=f1e131]:
-              - heading "阶段耗时分布 (P50 / P95 / P99)" [level=3] [ref=f1e132]
-              - generic [ref=f1e136]:
-                - img [ref=f1e137]:
-                  - generic [ref=f1e142]:
-                    - generic [ref=f1e143]: 解析
-                    - generic [ref=f1e145]: 校验
-                    - generic [ref=f1e147]: 写入
-                  - generic [ref=f1e150]:
-                    - generic [ref=f1e151]: 0ms
-                    - generic [ref=f1e153]: 150ms
-                    - generic [ref=f1e155]: 300ms
-                    - generic [ref=f1e157]: 450ms
-                    - generic [ref=f1e159]: 600ms
-                - list [ref=f1e189]:
-                  - listitem [ref=f1e190]: P50
-                  - listitem [ref=f1e193]: P95
-                  - listitem [ref=f1e196]: P99
-          - generic [ref=f1e199]:
-            - generic [ref=f1e200]:
-              - heading "错误类型分布" [level=3] [ref=f1e201]
-              - list [ref=f1e208]:
-                - listitem [ref=f1e209]: undefined -
-            - generic [ref=f1e212]:
-              - heading "慢批次 TOP 10" [level=3] [ref=f1e213]
-              - table [ref=f1e218]:
-                - rowgroup [ref=f1e219]:
-                  - row [ref=f1e220]:
-                    - columnheader "批次" [ref=f1e221]
-                    - columnheader "总耗时" [ref=f1e222]
-                    - columnheader "解析" [ref=f1e223]
-                    - columnheader "校验" [ref=f1e224]
-                    - columnheader "写入" [ref=f1e225]
-                - rowgroup [ref=f1e226]:
-                  - row [ref=f1e227]:
-                    - cell "#1" [ref=f1e228]
-                    - cell "4031ms" [ref=f1e229]
-                    - cell "573ms" [ref=f1e230]
-                    - cell "277ms" [ref=f1e231]
-                    - cell "291ms" [ref=f1e232]
-                  - row [ref=f1e233]:
-                    - cell "#1" [ref=f1e234]
-                    - cell "3793ms" [ref=f1e235]
-                    - cell "549ms" [ref=f1e236]
-                    - cell "350ms" [ref=f1e237]
-                    - cell "284ms" [ref=f1e238]
-                  - row [ref=f1e239]:
-                    - cell "#1" [ref=f1e240]
-                    - cell "3608ms" [ref=f1e241]
-                    - cell "534ms" [ref=f1e242]
-                    - cell "299ms" [ref=f1e243]
-                    - cell "0ms" [ref=f1e244]
-          - generic [ref=f1e245]:
-            - heading "队列积压深度" [level=3] [ref=f1e246]
-            - generic [ref=f1e251]:
-              - generic [ref=f1e252]:
-                - paragraph [ref=f1e253]: 待处理批次
-                - paragraph [ref=f1e254]: "0"
-              - generic [ref=f1e255]:
-                - paragraph [ref=f1e256]: 预估待处理行数
-                - paragraph [ref=f1e257]: "0"
-              - generic [ref=f1e258]:
-                - paragraph [ref=f1e259]: 告警阈值
-                - paragraph [ref=f1e260]: 5,000
-              - generic [ref=f1e261]:
-                - paragraph [ref=f1e262]: 状态
-                - generic [ref=f1e263]: 正常
-  - alert [ref=f1e79]
-  - generic [ref=f1e264]: "0"
+            - button "刷新" [ref=e66]
+          - heading "导入监控看板" [level=1] [ref=e72]
+          - generic [ref=e80]:
+            - generic [ref=e87]:
+              - paragraph [ref=e88]: 实时吞吐量
+              - paragraph [ref=e89]: 暂无数据
+            - generic [ref=e97]:
+              - paragraph [ref=e98]: 队列积压
+              - paragraph [ref=e99]: 0 批
+            - generic [ref=e106]:
+              - paragraph [ref=e107]: 校验 P95
+              - paragraph [ref=e108]: 342ms
+            - generic [ref=e116]:
+              - paragraph [ref=e117]: 写入 P95
+              - paragraph [ref=e118]: 290ms
+          - generic [ref=e119]:
+            - heading "实时吞吐量" [level=3] [ref=e121]
+            - generic [ref=e131]:
+              - heading "阶段耗时分布 (P50 / P95 / P99)" [level=3] [ref=e132]
+              - generic [ref=e136]:
+                - img [ref=e137]:
+                  - generic [ref=e142]:
+                    - generic [ref=e143]: 解析
+                    - generic [ref=e145]: 校验
+                    - generic [ref=e147]: 写入
+                  - generic [ref=e150]:
+                    - generic [ref=e151]: 0ms
+                    - generic [ref=e153]: 150ms
+                    - generic [ref=e155]: 300ms
+                    - generic [ref=e157]: 450ms
+                    - generic [ref=e159]: 600ms
+                - list [ref=e186]:
+                  - listitem [ref=e187]: P50
+                  - listitem [ref=e190]: P95
+                  - listitem [ref=e193]: P99
+          - generic [ref=e196]:
+            - generic [ref=e197]:
+              - heading "错误类型分布" [level=3] [ref=e198]
+              - list [ref=e205]:
+                - listitem [ref=e206]: undefined -
+                - listitem [ref=e209]: undefined -
+            - generic [ref=e212]:
+              - heading "慢批次 TOP 10" [level=3] [ref=e213]
+              - table [ref=e218]:
+                - rowgroup [ref=e219]:
+                  - row [ref=e220]:
+                    - columnheader "批次" [ref=e221]
+                    - columnheader "总耗时" [ref=e222]
+                    - columnheader "解析" [ref=e223]
+                    - columnheader "校验" [ref=e224]
+                    - columnheader "写入" [ref=e225]
+                - rowgroup [ref=e226]:
+                  - row [ref=e227]:
+                    - cell "#1" [ref=e228]
+                    - cell "4031ms" [ref=e229]
+                    - cell "573ms" [ref=e230]
+                    - cell "277ms" [ref=e231]
+                    - cell "291ms" [ref=e232]
+                  - row [ref=e233]:
+                    - cell "#1" [ref=e234]
+                    - cell "3793ms" [ref=e235]
+                    - cell "549ms" [ref=e236]
+                    - cell "350ms" [ref=e237]
+                    - cell "284ms" [ref=e238]
+                  - row [ref=e239]:
+                    - cell "#1" [ref=e240]
+                    - cell "3608ms" [ref=e241]
+                    - cell "534ms" [ref=e242]
+                    - cell "299ms" [ref=e243]
+                    - cell "0ms" [ref=e244]
+                  - row [ref=e245]:
+                    - cell "#1" [ref=e246]
+                    - cell "2058ms" [ref=e247]
+                    - cell "328ms" [ref=e248]
+                    - cell "0ms" [ref=e249]
+                    - cell "0ms" [ref=e250]
+          - generic [ref=e251]:
+            - heading "队列积压深度" [level=3] [ref=e252]
+            - generic [ref=e257]:
+              - generic [ref=e258]:
+                - paragraph [ref=e259]: 待处理批次
+                - paragraph [ref=e260]: "0"
+              - generic [ref=e261]:
+                - paragraph [ref=e262]: 预估待处理行数
+                - paragraph [ref=e263]: "0"
+              - generic [ref=e264]:
+                - paragraph [ref=e265]: 告警阈值
+                - paragraph [ref=e266]: 5,000
+              - generic [ref=e267]:
+                - paragraph [ref=e268]: 状态
+                - generic [ref=e269]: 正常
+  - alert [ref=e79]
+  - generic [ref=e270]: "0"
