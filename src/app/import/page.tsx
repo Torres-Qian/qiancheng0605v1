@@ -131,6 +131,7 @@ export default function ImportPage() {
     (async () => {
       try {
         const file = store.file;
+        if (!file) throw new Error("文件不存在");
         setParseProgress({ current: 30, total: 100, percent: 30 });
 
         // 客户端直传整个文件到 Blob Storage
