@@ -34,15 +34,38 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: "请选择解析规则" }, { status: 400 });
       }
 
-      // Blob 模式下不预扫描行数（文件不在本地）
-      // 用 BATCH_SIZE 作为 totalRows，让 Worker 单批处理整个文件并修正实际行数
+      // Blob 模式下：
+      //   1. 下载 Blob 文件并存入 DB（base64），Worker 用 db:// 协议读取
+      //   2. filePath 存 db:// 标识，让现有 Worker 无需更新代码即可工作
+      //   3. totalRows 用 BATCH_SIZE 占位，Worker 处理后会修正
       const BATCH_SIZE = 1000;
+
+      // 下载 Blob 文件
+      const fileResponse = await fetch(blobUrl, {
+        headers: process.env.BLOB_READ_WRITE_TOKEN
+          ? { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` }
+          : {},
+      });
+      if (!fileResponse.ok) {
+        return NextResponse.json(
+          { success: false, error: `下载 Blob 文件失败: HTTP ${fileResponse.status}` },
+          { status: 500 }
+        );
+      }
+      const arrayBuffer = await fileResponse.arrayBuffer();
+      const fileData = Buffer.from(arrayBuffer).toString("base64");
+
+      // 创建任务
       const result = await createImportTask({
         fileName,
-        filePath: blobUrl, // 直接存 Blob URL 作为文件路径
+        filePath: `db://import_tasks/${fileName}`,
         parseRuleId,
-        totalRows: BATCH_SIZE, // 假设单批文件不超过 1000 行
+        totalRows: BATCH_SIZE,
       });
+
+      // 写入文件数据到 DB
+      const db = getDb();
+      await db.update(importTasks).set({ fileData }).where(eq(importTasks.id, result.taskId));
 
       return NextResponse.json({ success: true, data: result });
     }
