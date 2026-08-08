@@ -126,10 +126,11 @@ export default function ImportPage() {
     }
     const { token, pathname } = tokenData.data;
 
-    // Step 2: 直接 PUT 到 vercel-storage.com（边缘网络直传，不经过 Vercel 函数）
-    const uploadRes = await fetch(`https://blob.vercel-storage.com/${pathname}?token=${encodeURIComponent(token)}`, {
+    // Step 2: 直接 PUT 到 vercel-storage.com，token 放在 Authorization 头
+    const uploadRes = await fetch(`https://blob.vercel-storage.com/${pathname}`, {
       method: "PUT",
       headers: {
+        "Authorization": `Bearer ${token}`,
         "Content-Type": file.type || "application/octet-stream",
         "x-vercel-filename": file.name,
       },
@@ -137,7 +138,7 @@ export default function ImportPage() {
     });
     if (!uploadRes.ok) {
       const errText = await uploadRes.text();
-      throw new Error(`直传失败: HTTP ${uploadRes.status} ${errText.substring(0, 100)}`);
+      throw new Error(`直传失败: HTTP ${uploadRes.status} ${errText.substring(0, 200)}`);
     }
     const blobResult = await uploadRes.json();
     return blobResult.url;
