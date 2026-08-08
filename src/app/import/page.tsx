@@ -121,116 +121,40 @@ export default function ImportPage() {
     return blob.url;
   };
 
-  // 异步导入模式：客户端直传 Blob + JSON 创建任务
+  // 异步导入模式：客户端直传 Blob + JSON 创建任务（不分片，整个文件一次上传）
   const handleAsyncImport = async () => {
     if (!store.file || !selectedRuleId) return;
 
     setParsing(true);
     setParseProgress({ current: 0, total: 100, percent: 0 });
 
-    const file = store.file;
-    const CHUNK_ROWS = 1000;
-    const MAX_CHUNK_SIZE = 0.5 * 1024 * 1024;
-    const needSplit = file.size > MAX_CHUNK_SIZE && file.name.match(/\.xlsx?$/i);
-
     (async () => {
       try {
-        let taskIds: string[] = [];
-        let totalRows = 0;
-        let firstTaskId: string | null = null;
+        const file = store.file;
+        setParseProgress({ current: 30, total: 100, percent: 30 });
 
-        if (needSplit) {
-          const XLSX = await import("xlsx");
-          const arrayBuffer = await file.arrayBuffer();
-          const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: "array" });
-          const sheetName = workbook.SheetNames[0];
-          const sheet = workbook.Sheets[sheetName];
-          const allData = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
-          const headerRow = allData[0];
-          const dataRows = allData.slice(1);
-          totalRows = dataRows.length;
+        // 客户端直传整个文件到 Blob Storage
+        const blobUrl = await uploadToBlob(file);
+        setParseProgress({ current: 70, total: 100, percent: 70 });
 
-          const chunks: File[] = [];
-          for (let i = 0; i < dataRows.length; i += CHUNK_ROWS) {
-            const chunkRows = dataRows.slice(i, i + CHUNK_ROWS);
-            const chunkData = [headerRow, ...chunkRows];
-            const chunkSheet = XLSX.utils.aoa_to_sheet(chunkData);
-            const chunkWorkbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(chunkWorkbook, chunkSheet, sheetName);
-            const chunkBuffer = XLSX.write(chunkWorkbook, { bookType: "xlsx", type: "array" });
-            chunks.push(new File(
-              [new Uint8Array(chunkBuffer)],
-              `${file.name.replace(/\.xlsx?$/i, "")}_part${i / CHUNK_ROWS + 1}.xlsx`,
-              { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
-            ));
-          }
-
-          setParseProgress({ current: 10, total: 100, percent: 10 });
-          let completedChunks = 0;
-
-          // 第一个 chunk 完成立即跳转；其余后台继续
-          chunks.forEach((chunk, idx) => {
-            (async () => {
-              const blobUrl = await uploadToBlob(chunk);
-              const taskRes = await fetch("/api/import-tasks", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  blobUrl,
-                  fileName: chunk.name,
-                  parseRuleId: selectedRuleId,
-                }),
-              });
-              const taskData = await taskRes.json();
-              if (taskData.success && taskData.data?.taskId) {
-                taskIds.push(taskData.data.taskId);
-                if (!firstTaskId) {
-                  firstTaskId = taskData.data.taskId;
-                  // 第一个任务创建成功，立即跳转
-                  showToast("success", "已开始处理，可在任务页查看进度");
-                  router.push(`/import/${firstTaskId}`);
-                }
-              }
-              completedChunks++;
-              setParseProgress({
-                current: Math.min(20 + completedChunks * 40, 90),
-                total: 100,
-                percent: Math.min(20 + completedChunks * 40, 90),
-              });
-            })();
-          });
-          // 等待所有 chunk 完成（不阻塞跳转）
-          await new Promise<void>((resolve) => {
-            const interval = setInterval(() => {
-              if (completedChunks >= chunks.length) {
-                clearInterval(interval);
-                resolve();
-              }
-            }, 200);
-          });
-        } else {
-          // 小文件直传
-          const blobUrl = await uploadToBlob(file);
-
-          const taskRes = await fetch("/api/import-tasks", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              blobUrl,
-              fileName: file.name,
-              parseRuleId: selectedRuleId,
-            }),
-          });
-          const taskData = await taskRes.json();
-          if (taskData.success && taskData.data?.taskId) {
-            taskIds.push(taskData.data.taskId);
-            firstTaskId = taskData.data.taskId;
-          } else {
-            throw new Error(taskData.error || "创建任务失败");
-          }
+        // 创建任务（JSON body，P50 < 50ms）
+        const taskRes = await fetch("/api/import-tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            blobUrl,
+            fileName: file.name,
+            parseRuleId: selectedRuleId,
+          }),
+        });
+        const taskData = await taskRes.json();
+        if (!taskData.success || !taskData.data?.taskId) {
+          throw new Error(taskData.error || "创建任务失败");
         }
 
         setParseProgress({ current: 100, total: 100, percent: 100 });
+        showToast("success", "任务已创建");
+        router.push(`/import/${taskData.data.taskId}`);
       } catch (err: any) {
         showToast("error", err.message || "请求失败");
         setParsing(false);
