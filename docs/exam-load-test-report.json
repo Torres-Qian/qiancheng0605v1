@@ -1,0 +1,148 @@
+{
+  "test_time": "2026-08-08T12:25:55.386Z",
+  "base_url": "https://qiancheng0605v1.vercel.app",
+  "mode": "Vercel Blob (Private Store)",
+  "worker_concurrency": 4,
+  "worker_rate_limit": "8/s",
+  "db": "Neon PostgreSQL Serverless",
+  "sku_count": 20000,
+  "upload_test": {
+    "file": "demo_1000.xlsx",
+    "rows": 1000,
+    "mode": "Blob",
+    "times_ms": [
+      689,
+      1350,
+      1733,
+      2138,
+      428
+    ],
+    "p50_ms": 1350,
+    "p95_ms": 2138,
+    "avg_ms": 1268,
+    "success_count": 5,
+    "total_attempts": 5,
+    "p95_pass": false
+  },
+  "e2e_test": {},
+  "big_file_test": {
+    "file": "10000-orders.xlsx",
+    "size_mb": "4.43",
+    "blob_http_status": 0,
+    "blob_duration_ms": 30018,
+    "blob_success": false,
+    "blob_url": "undefined..."
+  },
+  "monitor_snapshot": {
+    "queueDepth": {
+      "pendingBatches": "0",
+      "pendingRows": 0,
+      "status": "normal",
+      "threshold": 5000
+    },
+    "stageLatency": {
+      "parse": {
+        "p50": 810,
+        "p95": 15133,
+        "p99": 65273
+      },
+      "validate": {
+        "p50": 245,
+        "p95": 2315,
+        "p99": 3505
+      },
+      "insert": {
+        "p50": 667,
+        "p95": 13432,
+        "p99": 32617
+      }
+    },
+    "errorDistribution": [
+      {
+        "errorCode": "E007",
+        "errorName": "数据库写入失败",
+        "count": "13880",
+        "percentage": 0
+      },
+      {
+        "errorCode": "E001",
+        "errorName": "SKU 不存在",
+        "count": "11103",
+        "percentage": 0
+      },
+      {
+        "errorCode": "E003",
+        "errorName": "电话格式错误",
+        "count": "3928",
+        "percentage": 0
+      },
+      {
+        "errorCode": "E002",
+        "errorName": "必填字段缺失",
+        "count": "50",
+        "percentage": 0
+      },
+      {
+        "errorCode": "E004",
+        "errorName": "数量不是正数",
+        "count": "3",
+        "percentage": 0
+      }
+    ],
+    "slowBatches": [
+      {
+        "taskId": "49b9731a-01bd-488a-ba89-8cc689028b1b",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 260426,
+        "parseDurationMs": 79,
+        "validateDurationMs": 5553,
+        "insertDurationMs": 667,
+        "rowCount": 941
+      },
+      {
+        "taskId": "b775eb2b-50e0-47d3-8351-8dea4a91b807",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 260344,
+        "parseDurationMs": 1180,
+        "validateDurationMs": 253431,
+        "insertDurationMs": 5681,
+        "rowCount": 941
+      },
+      {
+        "taskId": "8b331c8d-9990-48bf-8618-0190f542d6d1",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 154610,
+        "parseDurationMs": 149114,
+        "validateDurationMs": 181,
+        "insertDurationMs": 5196,
+        "rowCount": 941
+      },
+      {
+        "taskId": "bce684c2-ee3b-486d-9620-72f7d5b3eba9",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 154309,
+        "parseDurationMs": 149234,
+        "validateDurationMs": 119,
+        "insertDurationMs": 4819,
+        "rowCount": 941
+      },
+      {
+        "taskId": "47bf70d6-3f3e-42c5-9898-bd834def43b3",
+        "unitId": "unit_0000",
+        "batchIndex": 0,
+        "totalDurationMs": 117513,
+        "parseDurationMs": 45606,
+        "validateDurationMs": 2011,
+        "insertDurationMs": 61848,
+        "rowCount": 1000
+      }
+    ]
+  },
+  "errors": [
+    "E2E task fad02904-957c-4803-9f65-dcbe1177ade7 timed out: PROCESSING"
+  ]
+}

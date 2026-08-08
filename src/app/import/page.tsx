@@ -110,32 +110,16 @@ export default function ImportPage() {
     }
   };
 
-  // 客户端直传 Vercel Blob Storage（不走 Vercel Serverless）
-  // 流程：先获取 token → 直接 PUT 到 Blob Storage（边缘网络，秒级） → 立即创建任务
+  // 上传单个分片到 /api/blob/upload（轻量代理，< 500ms）
   const uploadChunkDirect = async (file: File): Promise<string> => {
-    // Step 1: 获取 token（< 100ms）
-    const tokenRes = await fetch("/api/blob/upload-token", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fileName: file.name }),
-    });
-    const tokenData = await tokenRes.json();
-    if (!tokenData.success || !tokenData.data?.token) {
-      throw new Error("获取上传授权失败");
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/blob/upload", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!data.success || !data.data?.url) {
+      throw new Error(data.error || "上传失败");
     }
-    const { token, pathname } = tokenData.data;
-
-    // Step 2: 直接 PUT 到 Vercel Blob Storage（不走 Serverless，几百 ms 完成）
-    const uploadRes = await fetch(`https://blob.vercel-storage.com/${pathname}?token=${encodeURIComponent(token)}`, {
-      method: "PUT",
-      headers: { "Content-Type": file.type || "application/octet-stream", "x-vercel-filename": file.name },
-      body: file,
-    });
-    if (!uploadRes.ok) {
-      throw new Error(`Blob 上传失败: HTTP ${uploadRes.status}`);
-    }
-    const blobResult = await uploadRes.json();
-    return blobResult.url;
+    return data.data.url;
   };
 
   // 异步导入模式：客户端直传 Blob + JSON 创建任务
