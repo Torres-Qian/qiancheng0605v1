@@ -110,7 +110,7 @@ export default function ImportPage() {
     }
   };
 
-  // 异步导入模式：上传文件并创建异步任务
+  // 异步导入模式：Blob 直传 + JSON 创建任务（P50 < 100ms）
   const handleAsyncImport = async () => {
     if (!store.file || !selectedRuleId) return;
 
@@ -118,10 +118,6 @@ export default function ImportPage() {
     setParseProgress({ current: 0, total: 100, percent: 0 });
 
     try {
-      const formData = new FormData();
-      formData.append("file", store.file);
-      formData.append("parseRuleId", selectedRuleId);
-
       const progressInterval = setInterval(() => {
         setParseProgress(prev => ({
           current: Math.min(prev.current + 15, 85),
@@ -130,9 +126,32 @@ export default function ImportPage() {
         }));
       }, 100);
 
+      // Step 1: 文件直传 Vercel Blob Storage
+      const blobFormData = new FormData();
+      blobFormData.append("file", store.file);
+
+      const blobRes = await fetch("/api/blob", {
+        method: "POST",
+        body: blobFormData,
+      });
+
+      const blobData = await blobRes.json();
+      if (!blobData.success || !blobData.data?.url) {
+        clearInterval(progressInterval);
+        showToast("error", "文件上传失败，请重试");
+        setParsing(false);
+        return;
+      }
+
+      // Step 2: 创建异步导入任务（JSON body，极速返回）
       const res = await fetch("/api/import-tasks", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          blobUrl: blobData.data.url,
+          fileName: store.file.name,
+          parseRuleId: selectedRuleId,
+        }),
       });
 
       clearInterval(progressInterval);
