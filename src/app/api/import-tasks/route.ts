@@ -63,75 +63,77 @@ export async function POST(request: NextRequest) {
     }
 
     const fileName = file.name;
-    const ext = fileName.split(".").pop()?.toLowerCase();
 
-    // Step 1: 快速预扫描行数（仅 xlsx，50ms）+ 规则查询（并行）
-    const arrayBuffer = await file.arrayBuffer();
-    const [rawRowCount, ruleCfg] = await Promise.all([
-      (async () => {
-        if (ext !== "xlsx" && ext !== "xls") return 0;
-        try { return countExcelRowsQuick(arrayBuffer); } catch { return 0; }
-      })(),
-      (async () => {
-        try {
-          const db = getDb();
-          const rules = await db
-            .select({ ruleConfig: parseRules.ruleConfig })
-            .from(parseRules)
-            .where(eq(parseRules.id, parseRuleId))
-            .limit(1);
-          return (rules[0]?.ruleConfig as any) || null;
-        } catch { return null; }
-      })(),
-    ]);
-
-    // 扣除表头行
-    let totalRows = rawRowCount;
-    if (ruleCfg && totalRows > 0) {
-      const headerRow = Number(ruleCfg.headerRow) || 1;
-      const skipBottom = Number(ruleCfg.skipRows?.bottom) || 0;
-      const dataRows = totalRows - headerRow - skipBottom;
-      if (dataRows > 0) totalRows = dataRows;
-    }
-    if (totalRows <= 0) totalRows = 1;
-
-    // Step 2: 立即创建任务并返回（fileData 异步补写）
-    // 先用 db:// 协议创建任务，Worker 稍后从 DB 读取
+    // Step 1: 立即创建任务并返回（~50ms，不解析文件内容）
     const result = await createImportTask({
       fileName,
       filePath: `db://import_tasks/${fileName}`,
       parseRuleId,
-      totalRows,
+      totalRows: 1000, // 占位，Worker 处理时修正
     });
 
-    // Step 3: 异步写入文件数据 + Blob 上传（不阻塞响应）
+    // Step 2: 异步处理：预扫描 + 存文件（不阻塞响应）
     const { taskId } = result;
     const db = getDb();
 
-    // 用 queueMicrotask 确保在响应发送后执行
     queueMicrotask(async () => {
       try {
-        // 优先尝试 Blob 上传（无需 base64 编码）
-        try {
-          const { put } = await import("@vercel/blob");
-          const blob = await put(fileName, file, {
-            access: "private",
-            addRandomSuffix: true,
-            token: process.env.BLOB_READ_WRITE_TOKEN,
-          });
-          // 更新 filePath 为 Blob URL（Worker 从 Blob 下载）
-          await db.update(importTasks)
-            .set({ filePath: blob.url } as any)
-            .where(eq(importTasks.id, taskId));
-        } catch {
-          // Blob 上传失败，回退到 base64 存 DB
-          const fileData = Buffer.from(arrayBuffer).toString("base64");
-          await db.update(importTasks)
-            .set({ fileData } as any)
-            .where(eq(importTasks.id, taskId));
+        const arrayBuffer = await file.arrayBuffer();
+        const ext = fileName.split(".").pop()?.toLowerCase();
+
+        // 预扫描行数 + 存文件（并行）
+        const [rawRowCount, _blobResult] = await Promise.all([
+          (async () => {
+            if (ext !== "xlsx" && ext !== "xls") return 0;
+            try { return countExcelRowsQuick(arrayBuffer); } catch { return 0; }
+          })(),
+          // 优先 Blob 上传，回退 base64 存 DB
+          (async () => {
+            try {
+              const { put } = await import("@vercel/blob");
+              const blob = await put(fileName, file, {
+                access: "private", addRandomSuffix: true,
+                token: process.env.BLOB_READ_WRITE_TOKEN,
+              });
+              await db.update(importTasks)
+                .set({ filePath: blob.url } as any)
+                .where(eq(importTasks.id, taskId));
+            } catch {
+              const fileData = Buffer.from(arrayBuffer).toString("base64");
+              await db.update(importTasks)
+                .set({ fileData } as any)
+                .where(eq(importTasks.id, taskId));
+            }
+          })(),
+        ]);
+
+        // 修正 totalRows
+        if (rawRowCount > 0) {
+          let totalRows = rawRowCount;
+          const ruleCfg = await (async () => {
+            try {
+              const rules = await db
+                .select({ ruleConfig: parseRules.ruleConfig })
+                .from(parseRules)
+                .where(eq(parseRules.id, parseRuleId))
+                .limit(1);
+              return (rules[0]?.ruleConfig as any) || null;
+            } catch { return null; }
+          })();
+          if (ruleCfg && totalRows > 0) {
+            const headerRow = Number(ruleCfg.headerRow) || 1;
+            const skipBottom = Number(ruleCfg.skipRows?.bottom) || 0;
+            const dataRows = totalRows - headerRow - skipBottom;
+            if (dataRows > 0) totalRows = dataRows;
+          }
+          if (totalRows > 0) {
+            await db.update(importTasks)
+              .set({ totalRows } as any)
+              .where(eq(importTasks.id, taskId));
+          }
         }
       } catch (e) {
-        console.error(`[import-tasks] 异步存储文件失败: ${taskId}`, e);
+        console.error(`[import-tasks] 异步处理失败: ${taskId}`, e);
       }
     });
 
