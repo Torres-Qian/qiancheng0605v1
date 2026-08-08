@@ -1,6 +1,9 @@
 // POST /api/import-tasks - 上传文件，创建异步导入任务
 // 设计目标：P95 ≤ 1秒
-// 核心优化：先返回 taskId（不等待文件数据写入DB），文件内容通过 waitUntil 异步持久化
+// 优化策略：
+//   1. 不预扫描行数（用文件大小估算，Worker 修正）
+//   2. 事务内只写 import_tasks 元数据，Outbox 异步写入
+//   3. fileData 同步写入（必须等，否则 Worker 取不到文件）
 import { NextRequest, NextResponse } from "next/server";
 import { createImportTask } from "@/lib/services/import-task.service";
 import { getDb } from "@/lib/db";
@@ -26,31 +29,22 @@ export async function POST(request: NextRequest) {
     const fileSize = file.size;
     const estimatedRows = Math.max(1, Math.floor(fileSize / BYTES_PER_ROW_ESTIMATE));
 
-    // Step 1: 快速创建任务（不传 fileData，只写元数据，~50ms）
+    // Step 1: 创建任务（事务内只写 import_tasks 元数据，Outbox 异步）
     const result = await createImportTask({
       fileName,
       filePath: `db://import_tasks/${fileName}`,
-      // fileData 留空，先返回 taskId
       parseRuleId,
       totalRows: estimatedRows,
     });
 
-    // Step 2: 先返回 taskId，文件数据异步持久化
-    // 关键：arrayBuffer() 在响应返回后执行，不阻塞客户端等待
-    const { taskId } = result;
-    const db = getDb();
+    // Step 2: 同步读取并写入文件数据
+    // Vercel 的 request.formData() 已把文件读入内存，arrayBuffer() 是零拷贝返回引用
+    const arrayBuffer = await file.arrayBuffer();
+    const fileData = Buffer.from(arrayBuffer);
 
-    // 使用 setImmediate 延迟到下一个事件循环（响应发送后）
-    setImmediate(async () => {
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const fileData = Buffer.from(arrayBuffer);
-        await db.update(importTasks).set({ fileData } as any).where(eq(importTasks.id, taskId));
-        console.log(`[import-tasks] 文件数据异步写入完成: ${taskId}`);
-      } catch (e) {
-        console.error(`[import-tasks] 文件数据异步写入失败: ${taskId}`, e);
-      }
-    });
+    // 直接 UPDATE（不复用 createImportTask 中的事务）
+    const db = getDb();
+    await db.update(importTasks).set({ fileData } as any).where(eq(importTasks.id, result.taskId));
 
     return NextResponse.json({
       success: true,
