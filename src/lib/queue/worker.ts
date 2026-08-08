@@ -132,11 +132,13 @@ export async function createImportWorker(): Promise<Worker> {
           traceId,
         });
 
-        // 原子更新任务进度
+        // 修正 totalRows（上传时用的是估算值，Worker 处理时修正为实际值）
+        const actualRowCount = result.actualRowCount || (endRow - startRow + 1);
         const rowCount = endRow - startRow + 1;
         await db
           .update(importTasks)
           .set({
+            totalRows: actualRowCount, // 修正为实际行数
             processedRows: sql`${importTasks.processedRows} + ${rowCount}`,
             successRows: sql`${importTasks.successRows} + ${result.successCount}`,
             failedRows: sql`${importTasks.failedRows} + ${result.failedCount}`,

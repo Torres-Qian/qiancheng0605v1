@@ -289,6 +289,15 @@ export async function processBatch(params: BatchProcessParams): Promise<BatchPro
   const insertEnd = Date.now();
   const insertDurationMs = insertEnd - insertStart;
 
+  // 从 rawData 获取实际总行数（用于修正上传时的估算值）
+  let actualTotalRows = 0;
+  try {
+    const rawData = await readFileFromBuffer(fileBuffer.buffer as ArrayBuffer, fileName);
+    actualTotalRows = rawData.rows.length - (ruleConfig.headerRow || 1) - (ruleConfig.skipRows?.bottom || 0);
+  } catch {
+    actualTotalRows = successRecords.length + errors.length;
+  }
+
   return {
     successCount: successRecords.length,
     failedCount: errors.length,
@@ -296,5 +305,6 @@ export async function processBatch(params: BatchProcessParams): Promise<BatchPro
     ruleDurationMs,
     validateDurationMs,
     insertDurationMs,
+    actualRowCount: Math.max(1, actualTotalRows),
   };
 }

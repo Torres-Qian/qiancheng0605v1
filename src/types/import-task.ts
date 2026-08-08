@@ -64,6 +64,7 @@ export interface BatchProcessResult {
   ruleDurationMs: number;
   validateDurationMs: number;
   insertDurationMs: number;
+  actualRowCount?: number; // 实际解析出的总行数（用于修正上传时的估算值）
 }
 
 export interface BatchProcessParams {
