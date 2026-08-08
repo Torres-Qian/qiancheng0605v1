@@ -11,12 +11,10 @@
 //   1. 预扫描行数 + 规则查询并行（仅 xlsx）
 //   2. 事务内只写 import_tasks，Outbox 异步写入
 //   3. 文件数据存入 DB（base64 编码的 text 字段）
+//
+// 冷启动优化：所有重型依赖（drizzle、neon、blob、schema）改为动态 import，
+//   Vercel 打包时拆分为独立 chunk，冷启动只加载 ~2KB 的路由代码
 import { NextRequest, NextResponse } from "next/server";
-import { createImportTask } from "@/lib/services/import-task.service";
-import { countExcelRowsQuick } from "@/lib/engine/readers/excel";
-import { getDb } from "@/lib/db";
-import { importTasks, parseRules, eventOutbox, importTaskBatches } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 
 export async function POST(request: NextRequest) {
   try {
@@ -34,10 +32,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: "请选择解析规则" }, { status: 400 });
       }
 
-      // Blob 模式：
+      // Blob 模式：动态 import，减少冷启动加载量
       //   - filePath 存 Blob URL，Worker 通过 BLOB_READ_WRITE_TOKEN 下载
       //   - API 不下载文件，只写元数据
       //   - P50 < 100ms
+      const { createImportTask } = await import("@/lib/services/import-task.service");
       const BATCH_SIZE = 1000;
 
       const result = await createImportTask({
@@ -65,6 +64,8 @@ export async function POST(request: NextRequest) {
     const fileName = file.name;
 
     // Step 1: 立即创建任务并返回（~50ms，不解析文件内容）
+    // 动态 import 减少冷启动体积
+    const { createImportTask } = await import("@/lib/services/import-task.service");
     const result = await createImportTask({
       fileName,
       filePath: `db://import_tasks/${fileName}`,
@@ -74,10 +75,17 @@ export async function POST(request: NextRequest) {
 
     // Step 2: 异步处理：预扫描 + 存文件（不阻塞响应）
     const { taskId } = result;
-    const db = getDb();
 
     queueMicrotask(async () => {
       try {
+        // 动态 import 重型依赖（drizzle、schema、blob、excel reader）
+        const [{ getDb }, { importTasks, parseRules, eventOutbox, importTaskBatches }, { eq }] = await Promise.all([
+          import("@/lib/db"),
+          import("@/lib/db/schema"),
+          import("drizzle-orm"),
+        ]);
+
+        const db = getDb();
         const arrayBuffer = await file.arrayBuffer();
         const ext = fileName.split(".").pop()?.toLowerCase();
 
@@ -85,7 +93,10 @@ export async function POST(request: NextRequest) {
         const [rawRowCount, _blobResult] = await Promise.all([
           (async () => {
             if (ext !== "xlsx" && ext !== "xls") return 0;
-            try { return countExcelRowsQuick(arrayBuffer); } catch { return 0; }
+            try {
+              const { countExcelRowsQuick } = await import("@/lib/engine/readers/excel");
+              return countExcelRowsQuick(arrayBuffer);
+            } catch { return 0; }
           })(),
           // 优先 Blob 上传，回退 base64 存 DB
           (async () => {
