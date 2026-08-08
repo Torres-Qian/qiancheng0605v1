@@ -110,8 +110,8 @@ export default function ImportPage() {
     }
   };
 
-  // Legacy 模式（最稳定，兼容性好）：multipart 直传 /api/import-tasks
-  // 小文件（< 4.5MB）实测 P95 < 1s，Worker 异步处理
+  // Blob 模式：文件通过 /api/blob 上传到 Vercel Blob Storage，再 JSON 创建任务
+  // /api/import-tasks 只处理 JSON body，P50 < 100ms
   const handleAsyncImport = async () => {
     if (!store.file || !selectedRuleId) return;
 
@@ -120,26 +120,40 @@ export default function ImportPage() {
 
     try {
       const file = store.file;
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("parseRuleId", selectedRuleId);
 
+      // Step 1: 上传文件到 Blob Storage
+      const blobFd = new FormData();
+      blobFd.append("file", file);
+      const blobRes = await fetch("/api/blob", { method: "POST", body: blobFd });
+      const blobData = await blobRes.json();
+      if (!blobData.success || !blobData.data?.url) {
+        throw new Error("文件上传失败，请重试");
+      }
+
+      setParseProgress({ current: 70, total: 100, percent: 70 });
+
+      // Step 2: JSON 创建任务（极速返回）
       const res = await fetch("/api/import-tasks", {
         method: "POST",
-        body: fd,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          blobUrl: blobData.data.url,
+          fileName: file.name,
+          parseRuleId: selectedRuleId,
+        }),
       });
 
       const data = await res.json();
       if (data.success && data.data.taskId) {
         setParseProgress({ current: 100, total: 100, percent: 100 });
-        showToast("success", `任务已创建，共 ${data.data.totalRows} 行`);
+        showToast("success", `任务已创建`);
         setTimeout(() => router.push(`/import/${data.data.taskId}`), 200);
       } else {
         showToast("error", data.error || "创建导入任务失败");
         setParsing(false);
       }
     } catch (err: any) {
-      showToast("error", `请求失败: ${err.message}`);
+      showToast("error", err.message || "请求失败");
       setParsing(false);
     }
   };
