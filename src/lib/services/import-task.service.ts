@@ -27,89 +27,92 @@ export async function createImportTask(params: CreateTaskParams): Promise<Import
   const traceId = generateTraceId();
   const totalBatches = Math.ceil(totalRows / BATCH_SIZE);
 
-  // Transactional Outbox: 任务创建 + Outbox 事件在同一事务
-  await db.transaction(async (tx) => {
-    // 1. 创建任务
-    await tx.insert(importTasks).values({
-      id: taskId,
-      fileName,
-      filePath,
-      fileData: fileData || null,
-      parseRuleId,
-      status: "PENDING",
-      totalRows,
-      totalBatches,
-      traceId,
-    });
+  // 优化：事务内只写入 import_tasks 核心记录，确保任务创建快速返回
+  // Outbox / batches / trace_events 在事务外异步写入，不阻塞响应
+  await db.insert(importTasks).values({
+    id: taskId,
+    fileName,
+    filePath,
+    fileData: fileData || null,
+    parseRuleId,
+    status: "PENDING",
+    totalRows,
+    totalBatches,
+    traceId,
+  });
 
-    // 2. 创建 Trace 事件
-    await tx.insert(traceEvents).values({
-      traceId,
-      taskId,
-      eventName: "ImportTaskCreated",
-      eventStatus: "SUCCESS",
-      message: `导入任务已创建: ${fileName}, 总行数: ${totalRows}, 批次数: ${totalBatches}`,
-    });
-
-    // 3. 批量构造 Outbox + 批次记录，一次 SQL 插入所有（比循环快 10~30 倍）
-    const outboxValues: typeof eventOutbox.$inferInsert[] = [];
-    const batchValues: typeof importTaskBatches.$inferInsert[] = [];
-    const now = new Date().toISOString();
-    for (let i = 0; i < totalBatches; i++) {
-      const unitId = generateUnitId(i);
-      const startRow = i * BATCH_SIZE;
-      const endRow = Math.min(startRow + BATCH_SIZE - 1, totalRows - 1);
-      outboxValues.push({
-        aggregateId: taskId,
-        eventType: "ImportBatchCreated",
-        payload: {
-          event_id: `evt_${taskId}_${i}`,
-          event_type: "ImportBatchCreated",
-          schema_version: 1,
-          aggregate_id: taskId,
-          trace_id: traceId,
-          occurred_at: now,
+  // 异步写入 Outbox + batches + trace_events（不阻塞 HTTP 响应）
+  // 使用 setImmediate 确保在当前 tick 后异步执行
+  setImmediate(async () => {
+    try {
+      // 构造 Outbox + 批次记录
+      const outboxValues: typeof eventOutbox.$inferInsert[] = [];
+      const batchValues: typeof importTaskBatches.$inferInsert[] = [];
+      const now = new Date().toISOString();
+      for (let i = 0; i < totalBatches; i++) {
+        const unitId = generateUnitId(i);
+        const startRow = i * BATCH_SIZE;
+        const endRow = Math.min(startRow + BATCH_SIZE - 1, totalRows - 1);
+        outboxValues.push({
+          aggregateId: taskId,
+          eventType: "ImportBatchCreated",
           payload: {
-            taskId,
-            unitId,
-            batchIndex: i,
-            startRow,
-            endRow,
-            filePath,
-            parseRuleId,
-            traceId,
+            event_id: `evt_${taskId}_${i}`,
+            event_type: "ImportBatchCreated",
+            schema_version: 1,
+            aggregate_id: taskId,
+            trace_id: traceId,
+            occurred_at: now,
+            payload: {
+              taskId,
+              unitId,
+              batchIndex: i,
+              startRow,
+              endRow,
+              filePath,
+              parseRuleId,
+              traceId,
+            },
           },
-        },
-        status: "pending",
-      });
-      batchValues.push({
-        taskId,
-        unitId,
-        batchIndex: i,
-        startRow,
-        endRow,
-        status: "PENDING",
-      });
-    }
+          status: "pending",
+        });
+        batchValues.push({
+          taskId,
+          unitId,
+          batchIndex: i,
+          startRow,
+          endRow,
+          status: "PENDING",
+        });
+      }
 
-    if (outboxValues.length > 0) {
-      // 分片写入以避免单条 SQL 参数过多（Postgres 单条最多 65535 参数）
+      // 分片写入
       const CHUNK = 200;
       for (let i = 0; i < outboxValues.length; i += CHUNK) {
-        await tx.insert(eventOutbox).values(outboxValues.slice(i, i + CHUNK));
+        await db.insert(eventOutbox).values(outboxValues.slice(i, i + CHUNK));
       }
       for (let i = 0; i < batchValues.length; i += CHUNK) {
-        await tx.insert(importTaskBatches).values(batchValues.slice(i, i + CHUNK));
+        await db.insert(importTaskBatches).values(batchValues.slice(i, i + CHUNK));
       }
-    }
 
-    await tx.insert(traceEvents).values({
-      traceId,
-      taskId,
-      eventName: "OutboxEventsCreated",
-      eventStatus: "SUCCESS",
-      message: `已创建 ${totalBatches} 个 Outbox 事件`,
-    });
+      // Trace 事件
+      await db.insert(traceEvents).values([
+        {
+          traceId, taskId,
+          eventName: "ImportTaskCreated",
+          eventStatus: "SUCCESS",
+          message: `导入任务已创建: ${fileName}, 总行数: ${totalRows}, 批次数: ${totalBatches}`,
+        },
+        {
+          traceId, taskId,
+          eventName: "OutboxEventsCreated",
+          eventStatus: "SUCCESS",
+          message: `已创建 ${totalBatches} 个 Outbox 事件`,
+        },
+      ]);
+    } catch (e) {
+      console.error(`[import-task] 异步写入 Outbox 失败: taskId=${taskId}`, e);
+    }
   });
 
   return { taskId, traceId, status: "PENDING", totalRows, totalBatches };
