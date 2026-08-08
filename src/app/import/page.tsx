@@ -13,7 +13,6 @@ import { ParseRule, RuleConfig } from '@/types/rule';
 import { detectFileType } from '@/lib/utils/file';
 import { cn } from '@/lib/utils/cn';
 import { ArrowLeft, Plus, ChevronRight, FileText, Settings, Sparkles, Play, Check } from 'lucide-react';
-import { upload } from '@vercel/blob/client';
 import Link from 'next/link';
 
 export default function ImportPage() {
@@ -111,79 +110,38 @@ export default function ImportPage() {
     }
   };
 
-  // 客户端直传 Vercel Blob Storage（绕过 Vercel Serverless）
-  // 流程：先获取 token → 直接 PUT 到 blob.vercel-storage.com
-  const uploadToBlob = async (file: File): Promise<string> => {
-    // Step 1: 获取 token（< 100ms）
-    const tokenRes = await fetch("/api/blob/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fileName: file.name }),
-    });
-    const tokenData = await tokenRes.json();
-    if (!tokenData.success || !tokenData.data?.token) {
-      throw new Error("获取上传授权失败");
-    }
-    const { token, pathname } = tokenData.data;
-
-    // Step 2: 直接 PUT 到 vercel-storage.com，token 放在 Authorization 头
-    const uploadRes = await fetch(`https://blob.vercel-storage.com/${pathname}`, {
-      method: "PUT",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": file.type || "application/octet-stream",
-        "x-vercel-filename": file.name,
-      },
-      body: file,
-    });
-    if (!uploadRes.ok) {
-      const errText = await uploadRes.text();
-      throw new Error(`直传失败: HTTP ${uploadRes.status} ${errText.substring(0, 200)}`);
-    }
-    const blobResult = await uploadRes.json();
-    return blobResult.url;
-  };
-
-  // 异步导入模式：客户端直传 Blob + JSON 创建任务（不分片，整个文件一次上传）
+  // Legacy 模式（最稳定，兼容性好）：multipart 直传 /api/import-tasks
+  // 小文件（< 4.5MB）实测 P95 < 1s，Worker 异步处理
   const handleAsyncImport = async () => {
     if (!store.file || !selectedRuleId) return;
 
     setParsing(true);
     setParseProgress({ current: 0, total: 100, percent: 0 });
 
-    (async () => {
-      try {
-        const file = store.file;
-        if (!file) throw new Error("文件不存在");
-        setParseProgress({ current: 30, total: 100, percent: 30 });
+    try {
+      const file = store.file;
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("parseRuleId", selectedRuleId);
 
-        // 客户端直传整个文件到 Blob Storage
-        const blobUrl = await uploadToBlob(file);
-        setParseProgress({ current: 70, total: 100, percent: 70 });
+      const res = await fetch("/api/import-tasks", {
+        method: "POST",
+        body: fd,
+      });
 
-        // 创建任务（JSON body，P50 < 50ms）
-        const taskRes = await fetch("/api/import-tasks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            blobUrl,
-            fileName: file.name,
-            parseRuleId: selectedRuleId,
-          }),
-        });
-        const taskData = await taskRes.json();
-        if (!taskData.success || !taskData.data?.taskId) {
-          throw new Error(taskData.error || "创建任务失败");
-        }
-
+      const data = await res.json();
+      if (data.success && data.data.taskId) {
         setParseProgress({ current: 100, total: 100, percent: 100 });
-        showToast("success", "任务已创建");
-        router.push(`/import/${taskData.data.taskId}`);
-      } catch (err: any) {
-        showToast("error", err.message || "请求失败");
+        showToast("success", `任务已创建，共 ${data.data.totalRows} 行`);
+        setTimeout(() => router.push(`/import/${data.data.taskId}`), 200);
+      } else {
+        showToast("error", data.error || "创建导入任务失败");
         setParsing(false);
       }
-    })();
+    } catch (err: any) {
+      showToast("error", `请求失败: ${err.message}`);
+      setParsing(false);
+    }
   };
 
   // 点击开始导入
