@@ -88,6 +88,20 @@ export async function processBatch(params: BatchProcessParams): Promise<BatchPro
         throw new Error(`文件数据格式无法识别: ${typeof raw}`);
       }
       fileName = taskRecord[0].fileName;
+    } else if (filePath.startsWith("http://") || filePath.startsWith("https://")) {
+      // Blob URL（兜底分支，确保无论分支判断如何都能下载）
+      fileName = filePath.split("/").pop()?.split("?")[0] || "unknown";
+      const token = process.env.BLOB_READ_WRITE_TOKEN;
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const response = await fetch(filePath, { headers });
+      if (!response.ok) {
+        throw new Error(`Blob 文件下载失败: HTTP ${response.status} ${response.statusText}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      fileBuffer = Buffer.from(arrayBuffer);
     } else {
       // 从磁盘读取（本地开发）
       fileBuffer = fs.readFileSync(filePath);
