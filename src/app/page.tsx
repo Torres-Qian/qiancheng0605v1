@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { Upload, Settings, ListOrdered, ArrowRight, FileSpreadsheet, FileText, File } from 'lucide-react';
+import { Upload, Settings, ListOrdered, ArrowRight, FileSpreadsheet, FileText, File, Activity, Search } from 'lucide-react';
 
 const quickActions = [
   { href: '/import', label: '导入下单', desc: '上传文件开始批量下单', icon: Upload, color: 'bg-[var(--color-primary-light)] text-[var(--color-primary)]' },
   { href: '/rules', label: '解析规则', desc: '管理AI辅助解析规则', icon: Settings, color: 'bg-purple-50 text-purple-500' },
   { href: '/waybills', label: '运单列表', desc: '查看已导入的运单记录', icon: ListOrdered, color: 'bg-orange-50 text-orange-500' },
+  { href: '/monitor', label: '监控看板', desc: '实时吞吐量、队列积压、阶段耗时', icon: Activity, color: 'bg-emerald-50 text-emerald-500' },
+  { href: '/traces', label: '链路追踪', desc: '全链路 Trace 检索与诊断', icon: Search, color: 'bg-cyan-50 text-cyan-500' },
 ];
 
 const supportFormats = [
@@ -20,7 +22,7 @@ export default function HomePage() {
     <div className="space-y-6">
       {/* 欢迎卡片 */}
       <div className="bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-dark)] rounded-xl p-8 text-white">
-        <h1 className="text-2xl font-bold mb-2">万能导入 V2</h1>
+        <h1 className="text-2xl font-bold mb-2">万能导入 V4</h1>
         <p className="text-white/80 text-sm max-w-lg">
           智能多格式批量下单系统 —— 通过规则引擎 + AI大模型，实现 Excel/Word/PDF 任意格式文件的智能解析与批量下单
         </p>
@@ -35,7 +37,7 @@ export default function HomePage() {
       </div>
 
       {/* 快捷入口 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {quickActions.map((action) => (
           <Link
             key={action.href}

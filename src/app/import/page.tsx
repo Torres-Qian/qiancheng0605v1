@@ -110,12 +110,52 @@ export default function ImportPage() {
     }
   };
 
+  // 异步导入模式：上传文件并创建异步任务
+  const handleAsyncImport = async () => {
+    if (!store.file || !selectedRuleId) return;
+
+    setParsing(true);
+    setParseProgress({ current: 0, total: 100, percent: 0 });
+
+    try {
+      const formData = new FormData();
+      formData.append("file", store.file);
+      formData.append("parseRuleId", selectedRuleId);
+
+      const progressInterval = setInterval(() => {
+        setParseProgress(prev => ({
+          current: Math.min(prev.current + 15, 85),
+          total: 100,
+          percent: Math.min(prev.percent + 15, 85),
+        }));
+      }, 100);
+
+      const res = await fetch("/api/import-tasks", {
+        method: "POST",
+        body: formData,
+      });
+
+      clearInterval(progressInterval);
+
+      const data = await res.json();
+
+      if (data.success && data.data.taskId) {
+        setParseProgress({ current: 100, total: 100, percent: 100 });
+        showToast("success", `任务已创建，共 ${data.data.totalRows} 行`);
+        setTimeout(() => router.push(`/import/${data.data.taskId}`), 300);
+      } else {
+        showToast("error", data.error || "创建导入任务失败");
+        setParsing(false);
+      }
+    } catch (err: any) {
+      showToast("error", `请求失败: ${err.message}`);
+      setParsing(false);
+    }
+  };
+
   // 点击开始导入
   const handleStartImport = () => {
-    const selectedRule = rules.find(r => r.id === selectedRuleId);
-    if (selectedRule) {
-      handleUseRule(selectedRule);
-    }
+    handleAsyncImport();
   };
 
   const fileType = store.file ? detectFileType(store.file.name) : null;

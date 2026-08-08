@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils/cn';
 import {
-  LayoutDashboard, Upload, FileText, Settings, ListOrdered, Menu, X
+  LayoutDashboard, Upload, FileText, Settings, ListOrdered, Menu, X, Activity, Search
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -13,6 +13,8 @@ const navItems = [
   { href: '/import', label: '导入下单', icon: Upload },
   { href: '/rules', label: '解析规则', icon: Settings },
   { href: '/waybills', label: '运单列表', icon: ListOrdered },
+  { href: '/monitor', label: '监控看板', icon: Activity },
+  { href: '/traces', label: '链路追踪', icon: Search },
 ];
 
 export function Sidebar() {
@@ -89,7 +91,7 @@ export function Sidebar() {
         {/* Footer */}
         {!collapsed && (
           <div className="px-4 py-3 border-t border-[var(--color-border)]">
-            <p className="text-xs text-[var(--color-text-tertiary)]">万能导入 V2</p>
+            <p className="text-xs text-[var(--color-text-tertiary)]">万能导入 V4</p>
           </div>
         )}
       </aside>
