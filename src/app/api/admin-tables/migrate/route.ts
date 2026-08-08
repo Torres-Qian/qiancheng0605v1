@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS "import_tasks" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "file_name" varchar(500) NOT NULL,
   "file_path" text,
+  "file_data" text,
   "parse_rule_id" uuid,
   "status" varchar(20) NOT NULL DEFAULT 'PENDING',
   "total_rows" integer NOT NULL DEFAULT 0,

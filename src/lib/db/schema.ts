@@ -80,6 +80,7 @@ export const importTasks = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     fileName: varchar('file_name', { length: 500 }).notNull(),
     filePath: text('file_path'),
+    fileData: text('file_data'),
     parseRuleId: uuid('parse_rule_id').references(() => parseRules.id),
     status: varchar('status', { length: 20 }).notNull().default('PENDING'),
     totalRows: integer('total_rows').notNull().default(0),

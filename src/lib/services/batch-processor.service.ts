@@ -44,8 +44,27 @@ export async function processBatch(params: BatchProcessParams): Promise<BatchPro
   let records: WaybillRecord[] = [];
 
   try {
-    const fileBuffer = fs.readFileSync(filePath);
-    const fileName = filePath.split("/").pop() || filePath.split("\\").pop() || "unknown";
+    let fileBuffer: Buffer;
+    let fileName: string;
+
+    if (filePath.startsWith("db://")) {
+      // 从数据库读取（Vercel Serverless 兼容）
+      const taskRecord = await db
+        .select({ fileName: importTasks.fileName, fileData: importTasks.fileData })
+        .from(importTasks)
+        .where(eq(importTasks.id, taskId))
+        .limit(1);
+      if (!taskRecord[0]?.fileData) {
+        throw new Error(`任务文件数据不存在: ${taskId}`);
+      }
+      fileBuffer = Buffer.from(taskRecord[0].fileData, "base64");
+      fileName = taskRecord[0].fileName;
+    } else {
+      // 从磁盘读取（本地开发）
+      fileBuffer = fs.readFileSync(filePath);
+      fileName = filePath.split("/").pop() || filePath.split("\\").pop() || "unknown";
+    }
+
     const rawData = await readFileFromBuffer(fileBuffer.buffer as ArrayBuffer, fileName);
 
     // 应用规则引擎解析

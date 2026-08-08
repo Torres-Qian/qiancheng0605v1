@@ -14,12 +14,13 @@ const BATCH_SIZE = 1000;
 export interface CreateTaskParams {
   fileName: string;
   filePath: string;
+  fileData?: string;
   parseRuleId: string;
   totalRows: number;
 }
 
 export async function createImportTask(params: CreateTaskParams): Promise<ImportTaskCreateResult> {
-  const { fileName, filePath, parseRuleId, totalRows } = params;
+  const { fileName, filePath, fileData, parseRuleId, totalRows } = params;
   const db = getDb();
 
   const taskId = generateTaskId();
@@ -33,6 +34,7 @@ export async function createImportTask(params: CreateTaskParams): Promise<Import
       id: taskId,
       fileName,
       filePath,
+      fileData: fileData || null,
       parseRuleId,
       status: "PENDING",
       totalRows,
