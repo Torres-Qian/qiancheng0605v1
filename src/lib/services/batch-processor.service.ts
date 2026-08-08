@@ -48,7 +48,16 @@ export async function processBatch(params: BatchProcessParams): Promise<BatchPro
   let records: WaybillRecord[] = [];
 
   try {
-    if (filePath.startsWith("db://")) {
+    if (filePath.startsWith("https://")) {
+      // Blob 模式：从 Vercel Blob URL 下载文件
+      fileName = filePath.split("/").pop()?.split("?")[0] || "unknown";
+      const response = await fetch(filePath);
+      if (!response.ok) {
+        throw new Error(`Blob 文件下载失败: HTTP ${response.status} ${response.statusText}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      fileBuffer = Buffer.from(arrayBuffer);
+    } else if (filePath.startsWith("db://")) {
       // 从数据库读取（Vercel Serverless 兼容）
       const taskRecord = await db
         .select({ fileName: importTasks.fileName, fileData: importTasks.fileData })
