@@ -110,8 +110,35 @@ export default function ImportPage() {
     }
   };
 
-  // 异步导入模式：Blob 直传 + JSON 创建任务（P50 < 100ms）
-  // 大文件自动切分为 1000 行/片，并行上传，第一个 taskId 返回后立即跳转
+  // 客户端直传 Vercel Blob Storage（不走 Vercel Serverless）
+  // 流程：先获取 token → 直接 PUT 到 Blob Storage（边缘网络，秒级） → 立即创建任务
+  const uploadChunkDirect = async (file: File): Promise<string> => {
+    // Step 1: 获取 token（< 100ms）
+    const tokenRes = await fetch("/api/blob/upload-token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileName: file.name }),
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenData.success || !tokenData.data?.token) {
+      throw new Error("获取上传授权失败");
+    }
+    const { token, pathname } = tokenData.data;
+
+    // Step 2: 直接 PUT 到 Vercel Blob Storage（不走 Serverless，几百 ms 完成）
+    const uploadRes = await fetch(`https://blob.vercel-storage.com/${pathname}?token=${encodeURIComponent(token)}`, {
+      method: "PUT",
+      headers: { "Content-Type": file.type || "application/octet-stream", "x-vercel-filename": file.name },
+      body: file,
+    });
+    if (!uploadRes.ok) {
+      throw new Error(`Blob 上传失败: HTTP ${uploadRes.status}`);
+    }
+    const blobResult = await uploadRes.json();
+    return blobResult.url;
+  };
+
+  // 异步导入模式：客户端直传 Blob + JSON 创建任务
   const handleAsyncImport = async () => {
     if (!store.file || !selectedRuleId) return;
 
@@ -120,7 +147,7 @@ export default function ImportPage() {
 
     const file = store.file;
     const CHUNK_ROWS = 1000;
-    const MAX_CHUNK_SIZE = 0.5 * 1024 * 1024; // 每片最大 0.5MB（确保 Vercel 不卡）
+    const MAX_CHUNK_SIZE = 0.5 * 1024 * 1024;
     const needSplit = file.size > MAX_CHUNK_SIZE && file.name.match(/\.xlsx?$/i);
 
     (async () => {
@@ -140,8 +167,7 @@ export default function ImportPage() {
           const dataRows = allData.slice(1);
           totalRows = dataRows.length;
 
-          // 切分
-          const chunks: { file: File; rows: number }[] = [];
+          const chunks: File[] = [];
           for (let i = 0; i < dataRows.length; i += CHUNK_ROWS) {
             const chunkRows = dataRows.slice(i, i + CHUNK_ROWS);
             const chunkData = [headerRow, ...chunkRows];
@@ -149,35 +175,27 @@ export default function ImportPage() {
             const chunkWorkbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(chunkWorkbook, chunkSheet, sheetName);
             const chunkBuffer = XLSX.write(chunkWorkbook, { bookType: "xlsx", type: "array" });
-            chunks.push({
-              file: new File(
-                [new Uint8Array(chunkBuffer)],
-                `${file.name.replace(/\.xlsx?$/i, "")}_part${i / CHUNK_ROWS + 1}.xlsx`,
-                { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
-              ),
-              rows: chunkRows.length,
-            });
+            chunks.push(new File(
+              [new Uint8Array(chunkBuffer)],
+              `${file.name.replace(/\.xlsx?$/i, "")}_part${i / CHUNK_ROWS + 1}.xlsx`,
+              { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
+            ));
           }
 
           setParseProgress({ current: 10, total: 100, percent: 10 });
           let completedChunks = 0;
 
-          // 并行上传所有分片
           await Promise.all(chunks.map(async (chunk, idx) => {
-            const blobFd = new FormData();
-            blobFd.append("file", chunk.file);
-            const blobRes = await fetch("/api/blob", { method: "POST", body: blobFd });
-            const blobData = await blobRes.json();
-            if (!blobData.success || !blobData.data?.url) {
-              throw new Error(`分片 ${idx + 1} 上传失败`);
-            }
+            // 客户端直传 Blob（不走 Serverless）
+            const blobUrl = await uploadChunkDirect(chunk);
 
+            // 创建任务（JSON, ~50ms）
             const taskRes = await fetch("/api/import-tasks", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                blobUrl: blobData.data.url,
-                fileName: chunk.file.name,
+                blobUrl,
+                fileName: chunk.name,
                 parseRuleId: selectedRuleId,
               }),
             });
@@ -195,20 +213,14 @@ export default function ImportPage() {
             });
           }));
         } else {
-          // 小文件直接上传
-          const blobFd = new FormData();
-          blobFd.append("file", file);
-          const blobRes = await fetch("/api/blob", { method: "POST", body: blobFd });
-          const blobData = await blobRes.json();
-          if (!blobData.success || !blobData.data?.url) {
-            throw new Error("文件上传失败");
-          }
+          // 小文件直传
+          const blobUrl = await uploadChunkDirect(file);
 
           const taskRes = await fetch("/api/import-tasks", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              blobUrl: blobData.data.url,
+              blobUrl,
               fileName: file.name,
               parseRuleId: selectedRuleId,
             }),
